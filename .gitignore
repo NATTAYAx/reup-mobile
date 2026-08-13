@@ -1,0 +1,52 @@
+# ── build output ─────────────────────────────────────────────────────────────
+.gradle/
+build/
+*/build/
+.kotlin/
+.cxx/
+
+
+# ── machine-specific ─────────────────────────────────────────────────────────
+# local.properties holds the SDK path from whichever machine ran the build.
+# Android Studio regenerates it on first open, so committing it only breaks
+# things for anyone else (and for you, on the next machine).
+local.properties
+
+
+# ── signing ──────────────────────────────────────────────────────────────────
+# The release keystore is the app's identity. Lose it and you can never publish
+# an update to the same app again — not a lost password, a dead end. Leak it
+# and someone else can sign an update that phones accept as yours.
+*.jks
+*.keystore
+keystore.properties
+release.properties
+
+
+# ── secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+google-services.json
+*.pem
+*.key
+*.p12
+
+
+# ── notes and personal files ─────────────────────────────────────────────────
+notes/
+private/
+*.docx
+*.doc
+text.md
+handoff*.md
+
+
+# ── editors and OS ───────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+captures/

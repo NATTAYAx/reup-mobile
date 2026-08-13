@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Three permissions, and the two that are missing matter as much as these.
+
+      POST_NOTIFICATIONS is a runtime permission from API 33 up. Declaring it is
+      not enough; MainActivity has to ask, and the person can say no.
+
+      RECEIVE_BOOT_COMPLETED is install-time. Without it BootReceiver never runs
+      and every alarm dies at the next restart, silently.
+
+      VIBRATE is install-time and uncontroversial. The channel is silent, so
+      vibration is the only signal there is.
+
+      NOT declared: SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM. The scheduler uses
+      setAndAllowWhileIdle, which needs neither — the system may batch the
+      wake-up with other apps' and deliver a few minutes late, which is the
+      right trade on a phone with a tired battery. USE_EXACT_ALARM would also
+      have been refused: Google restricts it to apps whose main purpose is an
+      alarm clock or calendar, and this is neither.
+
+      NOT declared: FOREGROUND_SERVICE. Nothing runs in the background at all.
+      The app is asleep between the moment it is closed and the moment the OS
+      wakes it.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:label="Reup"
+        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:supportsRtl="true"
+        android:allowBackup="false">
+
+        <!--
+          allowBackup="false" is here from the very first commit rather than as
+          a later hardening step. Android's Auto Backup uploads app data to the
+          user's Google Drive by default, which for this app would eventually
+          mean a personal finance database and every task name leaving the
+          device with nobody having asked for it. Easier to never turn it on
+          than to remember to turn it off once there is data worth taking.
+        -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Not exported: nothing outside the app ever sends to this. The
+          PendingIntent the scheduler builds names the class explicitly, which
+          works regardless.
+        -->
+        <receiver
+            android:name=".AlarmReceiver"
+            android:exported="false" />
+
+        <!--
+          Exported, because the sender is the system rather than this app. All
+          three of these are protected broadcasts that only the OS is allowed to
+          send, so exporting costs nothing.
+
+          directBootAware is what lets LOCKED_BOOT_COMPLETED arrive at all — it
+          is delivered before the user has unlocked after a restart, when a
+          normal component is not yet running. It is safe here only because this
+          receiver touches no stored data; anything reading a database would
+          have to wait for the ordinary boot.
+        -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

@@ -1,0 +1,67 @@
+name: build
+
+# Two jobs, and the second one is the entire reason this file exists.
+#
+# `test` proves the logic is right. It runs on Linux because that is the
+# cheapest runner and the vectors do not care what OS they run on.
+#
+# `ios` proves the logic is still portable. It compiles the iOS targets that a
+# Windows machine cannot, so an accidental `import android.*` in commonMain
+# turns the build red the day it is written instead of the year it is noticed.
+#
+# macOS runners are free without limit on public repositories. On a private one
+# they bill at 10x, which would burn a 2,000-minute monthly allowance in about
+# 200 minutes of building — so if this repo is ever made private, expect to
+# either pay or drop the second job.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: vectors (jvm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: ./gradlew :shared:jvmTest --stacktrace
+
+      - name: upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: shared/build/reports/tests/
+          retention-days: 7
+
+  ios:
+    name: compile (ios)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Compile only. Running tests on a simulator would need a booted device
+      # and buys nothing here: it is the same commonMain code the JVM job just
+      # tested. What is being checked is that it compiles for ARM64 at all.
+      - run: ./gradlew :shared:compileKotlinIosArm64 :shared:compileKotlinIosSimulatorArm64 --stacktrace
