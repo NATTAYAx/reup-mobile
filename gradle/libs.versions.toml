@@ -2,12 +2,18 @@
 kotlin = "2.1.21"
 kotlinxDatetime = "0.6.2"
 kotlinxSerialization = "1.8.0"
+kotlinxCoroutines = "1.10.2"
 junitPlatform = "1.11.4"
 agp = "9.3.0"
 
 [libraries]
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+# Needed by the app module, not by :shared. Everything in the shared module
+# is plain `suspend`, which is a language feature and costs no dependency.
+# Dispatchers, withContext and launching a coroutine from a click listener
+# are the library, and those all live on the Android side.
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitPlatform" }

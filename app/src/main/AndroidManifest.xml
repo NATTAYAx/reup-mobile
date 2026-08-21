@@ -13,25 +13,60 @@
       VIBRATE is install-time and uncontroversial. The channel is silent, so
       vibration is the only signal there is.
 
-      NOT declared: SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM. The scheduler uses
-      setAndAllowWhileIdle, which needs neither — the system may batch the
-      wake-up with other apps' and deliver a few minutes late, which is the
-      right trade on a phone with a tired battery. USE_EXACT_ALARM would also
-      have been refused: Google restricts it to apps whose main purpose is an
-      alarm clock or calendar, and this is neither.
+      SCHEDULE_EXACT_ALARM is what lets a reminder arrive at the minute it was
+      set for. It was deliberately left out at first, on the grounds that
+      batched wake-ups are kinder to a tired battery — decided while the task
+      list was four hardcoded lines, so the saving cost nothing visible. It
+      turned out to cost a reminder arriving twenty-five minutes late, on a list
+      that has medication in it. Eight timers firing on the minute is a fraction
+      of a second of CPU each; what costs power on this path is the sync that
+      runs inside the alarm, not the timer.
+
+      It is a permission the person grants in system settings, not a pop-up, so
+      the app must work without it: the scheduler falls back to the batched call
+      and the home screen says reminders may be late, with a way to fix it.
+
+      NOT declared: USE_EXACT_ALARM. It needs no granting, and Google restricts
+      it to apps whose main purpose is an alarm clock or calendar. This is
+      neither, so declaring it would risk the listing for a convenience.
 
       NOT declared: FOREGROUND_SERVICE. Nothing runs in the background at all.
       The app is asleep between the moment it is closed and the moment the OS
       wakes it.
     -->
+    <!--
+      INTERNET is install-time and was not here until sync existed, which is
+      correct: an app that declares a permission it does not use is an app
+      nobody can audit. It is here now because the sync screen talks to a WebDAV
+      server. Without it every sync fails with a SecurityException while every
+      line of code involved is right, which is a bad hour to spend.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
+    <!--
+      usesCleartextTraffic, and the trade it represents.
+
+      Android refuses plain http by default from API 28 up, with no per-network
+      exception that can be written down in advance — the rules are per domain,
+      and a NAS on a home network has an address that is not known until someone
+      types it in. So the platform's answer here is all or nothing.
+
+      The rule that actually applies is in Storage.kt and has tests: https to
+      anywhere, http only to 127.x, 10.x, 172.16-31.x, 192.168.x, .local and
+      localhost. That check runs before a request is built, so turning this flag
+      on does not permit anything the app will actually do. What it buys is that
+      rclone or a NAS on the LAN works during setup, instead of failing with a
+      platform error that names none of this.
+    -->
     <application
         android:label="Reup"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:allowBackup="false">
 
         <!--
@@ -53,6 +88,68 @@
         </activity>
 
         <!--
+          Not exported: nothing outside the app sends here, and it holds the
+          pairing code, which is the encryption key. An exported activity is a
+          thing any installed app can start.
+        -->
+        <activity
+            android:name=".SyncActivity"
+            android:exported="false"
+            android:label="ซิงก์กับคอม" />
+
+        <!-- Adding a task. Not exported: nothing outside this app has any
+             business writing rows into it. -->
+        <activity
+            android:name=".AddTaskActivity"
+            android:exported="false"
+            android:label="เพิ่มงาน" />
+
+        <!-- Money, both directions. Not exported, same as the rest. -->
+        <activity
+            android:name=".AddMoneyActivity"
+            android:exported="false"
+            android:label="บันทึกเงิน" />
+
+        <!--
+          The one exported component in this app, and the only one that has to
+          be: a browser cannot hand a result back to an activity it is not
+          allowed to start.
+
+          Kept apart from SyncActivity on purpose. Putting the filter there
+          would export the settings screen itself and change its launch mode for
+          every other way in. Here the surface any app can reach is one file
+          that reads a Uri and hands it to code that does not trust it.
+
+          What protects it is not obscurity — the scheme is right here, and it
+          can be derived from the client id anyway. It is that the redirect is
+          checked against a state this app generated and stored before the
+          browser opened, and against a verifier only this install holds.
+
+          singleTask so coming back lands on the copy already running rather
+          than stacking a second one behind the browser.
+        -->
+        <activity
+            android:name=".OAuthRedirectActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!--
+                  The client id backwards. Google reserves this scheme when the
+                  Android client is created, so it is never typed into the
+                  console — but it is typed here, and androidRedirectUri builds
+                  the same string on the other side. A test compares the two,
+                  because one wrong character produces a browser sitting on a
+                  page nothing answers, with no error at either end.
+                -->
+                <data android:scheme="com.googleusercontent.apps.250966479972-6o0u00rso1aq0kko2rjr10kv8cdu1bhl" />
+            </intent-filter>
+        </activity>
+
+        <!--
           Not exported: nothing outside the app ever sends to this. The
           PendingIntent the scheduler builds names the class explicitly, which
           works regardless.
@@ -68,9 +165,16 @@
 
           directBootAware is what lets LOCKED_BOOT_COMPLETED arrive at all — it
           is delivered before the user has unlocked after a restart, when a
-          normal component is not yet running. It is safe here only because this
-          receiver touches no stored data; anything reading a database would
-          have to wait for the ordinary boot.
+          normal component is not yet running.
+
+          That used to be free, because the receiver read a hardcoded list. It
+          reads the database now, and the database is credential-encrypted,
+          which is the right kind for a file holding medication times and money
+          and the kind that does not exist yet at that point in a boot. So the
+          receiver checks isUserUnlocked and returns if it is not; BOOT_COMPLETED
+          does the work a moment after the first unlock. The declaration stays
+          because on a phone with no secure lock screen the user is already
+          unlocked when this arrives, and the early reschedule still happens.
         -->
         <receiver
             android:name=".BootReceiver"

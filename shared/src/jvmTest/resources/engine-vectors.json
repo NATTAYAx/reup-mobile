@@ -1,0 +1,1403 @@
+{
+  "version": 1,
+  "generatedBy": "gen-engine-vectors.ts",
+  "planPull": [
+    {
+      "id": "pull-fresh",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-bbb-1.reup",
+        "notes.txt",
+        "dev-bbb-3.reup"
+      ],
+      "cursor": {},
+      "device": "dev-ccc",
+      "expected": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-bbb-1.reup",
+        "dev-bbb-3.reup"
+      ]
+    },
+    {
+      "id": "pull-own-files-are-skipped",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-bbb-1.reup",
+        "notes.txt",
+        "dev-bbb-3.reup"
+      ],
+      "cursor": {},
+      "device": "dev-aaa",
+      "expected": [
+        "dev-bbb-1.reup",
+        "dev-bbb-3.reup"
+      ]
+    },
+    {
+      "id": "pull-partly-seen",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-bbb-1.reup",
+        "notes.txt",
+        "dev-bbb-3.reup"
+      ],
+      "cursor": {
+        "dev-aaa": 1
+      },
+      "device": "dev-ccc",
+      "expected": [
+        "dev-aaa-2.reup",
+        "dev-bbb-1.reup",
+        "dev-bbb-3.reup"
+      ]
+    },
+    {
+      "id": "pull-nothing-new",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-bbb-1.reup",
+        "notes.txt",
+        "dev-bbb-3.reup"
+      ],
+      "cursor": {
+        "dev-aaa": 9,
+        "dev-bbb": 9
+      },
+      "device": "dev-ccc",
+      "expected": []
+    },
+    {
+      "id": "pull-ignores-strangers",
+      "names": [
+        "notes.txt",
+        "readme",
+        "dev-aaa-.reup"
+      ],
+      "cursor": {},
+      "device": "dev-ccc",
+      "expected": []
+    }
+  ],
+  "advance": [
+    {
+      "id": "adv-all-good",
+      "cursor": {},
+      "attempted": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-bbb-1.reup"
+      ],
+      "failed": [],
+      "expected": {
+        "dev-aaa": 2,
+        "dev-bbb": 1
+      }
+    },
+    {
+      "id": "adv-stops-at-gap",
+      "cursor": {},
+      "attempted": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup"
+      ],
+      "failed": [
+        "dev-aaa-2.reup"
+      ],
+      "expected": {
+        "dev-aaa": 1
+      }
+    },
+    {
+      "id": "adv-one-device-failing-does-not-block-another",
+      "cursor": {},
+      "attempted": [
+        "dev-aaa-1.reup",
+        "dev-bbb-1.reup",
+        "dev-bbb-2.reup"
+      ],
+      "failed": [
+        "dev-aaa-1.reup"
+      ],
+      "expected": {
+        "dev-bbb": 2
+      }
+    },
+    {
+      "id": "adv-never-goes-backwards",
+      "cursor": {
+        "dev-aaa": 5
+      },
+      "attempted": [
+        "dev-aaa-2.reup"
+      ],
+      "failed": [],
+      "expected": {
+        "dev-aaa": 5
+      }
+    }
+  ],
+  "planApply": [
+    {
+      "id": "apply-new-row",
+      "remote": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T10:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "theirs",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "local": [],
+      "expected": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T10:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "theirs",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "apply-newer-wins",
+      "remote": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T10:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "theirs",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "local": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "expected": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T10:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "theirs",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "apply-older-loses-and-writes-nothing",
+      "remote": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T08:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "older",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "local": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "expected": []
+    },
+    {
+      "id": "apply-identical-writes-nothing",
+      "remote": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "local": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "expected": []
+    },
+    {
+      "id": "apply-completion-survives-an-older-base",
+      "remote": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T08:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "older",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": "2026-08-15T04:00:00.000Z",
+            "cycle_checked_until": "2026-08-15T04:00:00.000Z",
+            "missed_streak": 0
+          }
+        }
+      ],
+      "local": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "expected": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": "2026-08-15T04:00:00.000Z",
+            "cycle_checked_until": "2026-08-15T04:00:00.000Z",
+            "missed_streak": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "apply-tombstone",
+      "remote": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T10:00:00.000Z",
+          "deleted": true,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "theirs",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "local": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "expected": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T10:00:00.000Z",
+          "deleted": true,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "theirs",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ]
+    }
+  ],
+  "planPush": [
+    {
+      "id": "push-fresh",
+      "pending": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "remoteView": [],
+      "device": "dev-aaa",
+      "seq": 0,
+      "full": false,
+      "writtenAt": "2026-08-15T12:00:00.000Z",
+      "expected": {
+        "version": 1,
+        "device": "dev-aaa",
+        "seq": 1,
+        "writtenAt": "2026-08-15T12:00:00.000Z",
+        "changes": [
+          {
+            "table": "tasks",
+            "uid": "u1",
+            "updatedAt": "2026-08-14T09:00:00.000Z",
+            "deleted": false,
+            "origin": "dev-aaa",
+            "fields": {
+              "name": "mine",
+              "category": "game",
+              "reset_type": "daily",
+              "reset_time": "04:00",
+              "is_active": 1,
+              "completed_until": null,
+              "cycle_checked_until": null,
+              "missed_streak": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "push-skips-what-remote-already-has",
+      "pending": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "remoteView": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "device": "dev-aaa",
+      "seq": 4,
+      "full": false,
+      "writtenAt": "2026-08-15T12:00:00.000Z",
+      "expected": null
+    },
+    {
+      "id": "push-sends-a-newer-local-edit",
+      "pending": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T10:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "theirs",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "remoteView": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "device": "dev-aaa",
+      "seq": 4,
+      "full": false,
+      "writtenAt": "2026-08-15T12:00:00.000Z",
+      "expected": {
+        "version": 1,
+        "device": "dev-aaa",
+        "seq": 5,
+        "writtenAt": "2026-08-15T12:00:00.000Z",
+        "changes": [
+          {
+            "table": "tasks",
+            "uid": "u1",
+            "updatedAt": "2026-08-14T10:00:00.000Z",
+            "deleted": false,
+            "origin": "dev-aaa",
+            "fields": {
+              "name": "theirs",
+              "category": "game",
+              "reset_type": "daily",
+              "reset_time": "04:00",
+              "is_active": 1,
+              "completed_until": null,
+              "cycle_checked_until": null,
+              "missed_streak": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "push-nothing-to-say",
+      "pending": [],
+      "remoteView": [],
+      "device": "dev-aaa",
+      "seq": 4,
+      "full": false,
+      "writtenAt": "2026-08-15T12:00:00.000Z",
+      "expected": null
+    },
+    {
+      "id": "push-stamps-our-origin",
+      "pending": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-zzz",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "remoteView": [],
+      "device": "dev-aaa",
+      "seq": 0,
+      "full": false,
+      "writtenAt": "2026-08-15T12:00:00.000Z",
+      "expected": {
+        "version": 1,
+        "device": "dev-aaa",
+        "seq": 1,
+        "writtenAt": "2026-08-15T12:00:00.000Z",
+        "changes": [
+          {
+            "table": "tasks",
+            "uid": "u1",
+            "updatedAt": "2026-08-14T09:00:00.000Z",
+            "deleted": false,
+            "origin": "dev-aaa",
+            "fields": {
+              "name": "mine",
+              "category": "game",
+              "reset_type": "daily",
+              "reset_time": "04:00",
+              "is_active": 1,
+              "completed_until": null,
+              "cycle_checked_until": null,
+              "missed_streak": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "push-full-keeps-what-remote-already-has",
+      "pending": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-aaa",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "remoteView": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-14T09:00:00.000Z",
+          "deleted": false,
+          "origin": "dev-bbb",
+          "fields": {
+            "name": "mine",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "is_active": 1,
+            "completed_until": null,
+            "cycle_checked_until": null,
+            "missed_streak": 0
+          }
+        }
+      ],
+      "device": "dev-aaa",
+      "seq": 4,
+      "full": true,
+      "writtenAt": "2026-08-15T12:00:00.000Z",
+      "expected": {
+        "version": 1,
+        "device": "dev-aaa",
+        "seq": 5,
+        "writtenAt": "2026-08-15T12:00:00.000Z",
+        "changes": [
+          {
+            "table": "tasks",
+            "uid": "u1",
+            "updatedAt": "2026-08-14T09:00:00.000Z",
+            "deleted": false,
+            "origin": "dev-aaa",
+            "fields": {
+              "name": "mine",
+              "category": "game",
+              "reset_type": "daily",
+              "reset_time": "04:00",
+              "is_active": 1,
+              "completed_until": null,
+              "cycle_checked_until": null,
+              "missed_streak": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "push-full-of-nothing-is-still-nothing",
+      "pending": [],
+      "remoteView": [],
+      "device": "dev-aaa",
+      "seq": 4,
+      "full": true,
+      "writtenAt": "2026-08-15T12:00:00.000Z",
+      "expected": null
+    }
+  ],
+  "wantsSnapshot": [
+    {
+      "id": "snap-an-empty-folder-needs-nothing",
+      "names": [],
+      "device": "dev-aaa",
+      "snapshotSeq": 0,
+      "expected": false
+    },
+    {
+      "id": "snap-a-device-that-never-snapshotted-still-waits",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup"
+      ],
+      "device": "dev-aaa",
+      "snapshotSeq": 0,
+      "expected": false
+    },
+    {
+      "id": "snap-not-yet",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup",
+        "dev-aaa-10.reup"
+      ],
+      "device": "dev-aaa",
+      "snapshotSeq": 5,
+      "expected": false
+    },
+    {
+      "id": "snap-one-below-the-line",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup",
+        "dev-aaa-10.reup",
+        "dev-aaa-11.reup",
+        "dev-aaa-12.reup",
+        "dev-aaa-13.reup",
+        "dev-aaa-14.reup",
+        "dev-aaa-15.reup",
+        "dev-aaa-16.reup",
+        "dev-aaa-17.reup",
+        "dev-aaa-18.reup",
+        "dev-aaa-19.reup",
+        "dev-aaa-20.reup",
+        "dev-aaa-21.reup",
+        "dev-aaa-22.reup",
+        "dev-aaa-23.reup",
+        "dev-aaa-24.reup",
+        "dev-aaa-25.reup",
+        "dev-aaa-26.reup",
+        "dev-aaa-27.reup",
+        "dev-aaa-28.reup",
+        "dev-aaa-29.reup",
+        "dev-aaa-30.reup",
+        "dev-aaa-31.reup",
+        "dev-aaa-32.reup",
+        "dev-aaa-33.reup",
+        "dev-aaa-34.reup",
+        "dev-aaa-35.reup",
+        "dev-aaa-36.reup",
+        "dev-aaa-37.reup",
+        "dev-aaa-38.reup",
+        "dev-aaa-39.reup",
+        "dev-aaa-40.reup",
+        "dev-aaa-41.reup",
+        "dev-aaa-42.reup",
+        "dev-aaa-43.reup",
+        "dev-aaa-44.reup",
+        "dev-aaa-45.reup",
+        "dev-aaa-46.reup",
+        "dev-aaa-47.reup",
+        "dev-aaa-48.reup",
+        "dev-aaa-49.reup",
+        "dev-aaa-50.reup",
+        "dev-aaa-51.reup",
+        "dev-aaa-52.reup",
+        "dev-aaa-53.reup",
+        "dev-aaa-54.reup",
+        "dev-aaa-55.reup",
+        "dev-aaa-56.reup",
+        "dev-aaa-57.reup",
+        "dev-aaa-58.reup",
+        "dev-aaa-59.reup",
+        "dev-aaa-60.reup",
+        "dev-aaa-61.reup",
+        "dev-aaa-62.reup",
+        "dev-aaa-63.reup"
+      ],
+      "device": "dev-aaa",
+      "snapshotSeq": 5,
+      "expected": false
+    },
+    {
+      "id": "snap-exactly-at-the-line",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup",
+        "dev-aaa-10.reup",
+        "dev-aaa-11.reup",
+        "dev-aaa-12.reup",
+        "dev-aaa-13.reup",
+        "dev-aaa-14.reup",
+        "dev-aaa-15.reup",
+        "dev-aaa-16.reup",
+        "dev-aaa-17.reup",
+        "dev-aaa-18.reup",
+        "dev-aaa-19.reup",
+        "dev-aaa-20.reup",
+        "dev-aaa-21.reup",
+        "dev-aaa-22.reup",
+        "dev-aaa-23.reup",
+        "dev-aaa-24.reup",
+        "dev-aaa-25.reup",
+        "dev-aaa-26.reup",
+        "dev-aaa-27.reup",
+        "dev-aaa-28.reup",
+        "dev-aaa-29.reup",
+        "dev-aaa-30.reup",
+        "dev-aaa-31.reup",
+        "dev-aaa-32.reup",
+        "dev-aaa-33.reup",
+        "dev-aaa-34.reup",
+        "dev-aaa-35.reup",
+        "dev-aaa-36.reup",
+        "dev-aaa-37.reup",
+        "dev-aaa-38.reup",
+        "dev-aaa-39.reup",
+        "dev-aaa-40.reup",
+        "dev-aaa-41.reup",
+        "dev-aaa-42.reup",
+        "dev-aaa-43.reup",
+        "dev-aaa-44.reup",
+        "dev-aaa-45.reup",
+        "dev-aaa-46.reup",
+        "dev-aaa-47.reup",
+        "dev-aaa-48.reup",
+        "dev-aaa-49.reup",
+        "dev-aaa-50.reup",
+        "dev-aaa-51.reup",
+        "dev-aaa-52.reup",
+        "dev-aaa-53.reup",
+        "dev-aaa-54.reup",
+        "dev-aaa-55.reup",
+        "dev-aaa-56.reup",
+        "dev-aaa-57.reup",
+        "dev-aaa-58.reup",
+        "dev-aaa-59.reup",
+        "dev-aaa-60.reup",
+        "dev-aaa-61.reup",
+        "dev-aaa-62.reup",
+        "dev-aaa-63.reup",
+        "dev-aaa-64.reup"
+      ],
+      "device": "dev-aaa",
+      "snapshotSeq": 5,
+      "expected": true
+    },
+    {
+      "id": "snap-other-devices-do-not-count",
+      "names": [
+        "dev-bbb-1.reup",
+        "dev-bbb-2.reup",
+        "dev-bbb-3.reup",
+        "dev-bbb-4.reup",
+        "dev-bbb-5.reup",
+        "dev-bbb-6.reup",
+        "dev-bbb-7.reup",
+        "dev-bbb-8.reup",
+        "dev-bbb-9.reup",
+        "dev-bbb-10.reup",
+        "dev-bbb-11.reup",
+        "dev-bbb-12.reup",
+        "dev-bbb-13.reup",
+        "dev-bbb-14.reup",
+        "dev-bbb-15.reup",
+        "dev-bbb-16.reup",
+        "dev-bbb-17.reup",
+        "dev-bbb-18.reup",
+        "dev-bbb-19.reup",
+        "dev-bbb-20.reup",
+        "dev-bbb-21.reup",
+        "dev-bbb-22.reup",
+        "dev-bbb-23.reup",
+        "dev-bbb-24.reup",
+        "dev-bbb-25.reup",
+        "dev-bbb-26.reup",
+        "dev-bbb-27.reup",
+        "dev-bbb-28.reup",
+        "dev-bbb-29.reup",
+        "dev-bbb-30.reup",
+        "dev-bbb-31.reup",
+        "dev-bbb-32.reup",
+        "dev-bbb-33.reup",
+        "dev-bbb-34.reup",
+        "dev-bbb-35.reup",
+        "dev-bbb-36.reup",
+        "dev-bbb-37.reup",
+        "dev-bbb-38.reup",
+        "dev-bbb-39.reup",
+        "dev-bbb-40.reup",
+        "dev-bbb-41.reup",
+        "dev-bbb-42.reup",
+        "dev-bbb-43.reup",
+        "dev-bbb-44.reup",
+        "dev-bbb-45.reup",
+        "dev-bbb-46.reup",
+        "dev-bbb-47.reup",
+        "dev-bbb-48.reup",
+        "dev-bbb-49.reup",
+        "dev-bbb-50.reup",
+        "dev-bbb-51.reup",
+        "dev-bbb-52.reup",
+        "dev-bbb-53.reup",
+        "dev-bbb-54.reup",
+        "dev-bbb-55.reup",
+        "dev-bbb-56.reup",
+        "dev-bbb-57.reup",
+        "dev-bbb-58.reup",
+        "dev-bbb-59.reup",
+        "dev-bbb-60.reup",
+        "dev-bbb-61.reup",
+        "dev-bbb-62.reup",
+        "dev-bbb-63.reup",
+        "dev-bbb-64.reup",
+        "dev-bbb-65.reup",
+        "dev-bbb-66.reup",
+        "dev-bbb-67.reup",
+        "dev-bbb-68.reup",
+        "dev-bbb-69.reup",
+        "dev-bbb-70.reup",
+        "dev-bbb-71.reup",
+        "dev-bbb-72.reup",
+        "dev-bbb-73.reup",
+        "dev-bbb-74.reup",
+        "dev-bbb-75.reup",
+        "dev-bbb-76.reup",
+        "dev-bbb-77.reup",
+        "dev-bbb-78.reup",
+        "dev-bbb-79.reup",
+        "dev-bbb-80.reup",
+        "dev-bbb-81.reup",
+        "dev-bbb-82.reup",
+        "dev-bbb-83.reup",
+        "dev-bbb-84.reup",
+        "dev-bbb-85.reup",
+        "dev-bbb-86.reup",
+        "dev-bbb-87.reup",
+        "dev-bbb-88.reup",
+        "dev-bbb-89.reup",
+        "dev-bbb-90.reup",
+        "dev-aaa-1.reup"
+      ],
+      "device": "dev-aaa",
+      "snapshotSeq": 5,
+      "expected": false
+    },
+    {
+      "id": "snap-strangers-do-not-count",
+      "names": [
+        "notes.txt",
+        "a.reup",
+        "dev-aaa-.reup",
+        "dev-aaa-1.reup"
+      ],
+      "device": "dev-aaa",
+      "snapshotSeq": 5,
+      "expected": false
+    }
+  ],
+  "planPrune": [
+    {
+      "id": "prune-nothing-before-a-second-snapshot",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup",
+        "dev-aaa-10.reup",
+        "dev-aaa-11.reup",
+        "dev-aaa-12.reup",
+        "dev-aaa-13.reup",
+        "dev-aaa-14.reup",
+        "dev-aaa-15.reup",
+        "dev-aaa-16.reup",
+        "dev-aaa-17.reup",
+        "dev-aaa-18.reup",
+        "dev-aaa-19.reup",
+        "dev-aaa-20.reup"
+      ],
+      "device": "dev-aaa",
+      "priorSnapshotSeq": 0,
+      "limit": 32,
+      "expected": []
+    },
+    {
+      "id": "prune-below-the-line-only",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup",
+        "dev-aaa-10.reup",
+        "dev-aaa-11.reup",
+        "dev-aaa-12.reup",
+        "dev-aaa-13.reup",
+        "dev-aaa-14.reup",
+        "dev-aaa-15.reup",
+        "dev-aaa-16.reup",
+        "dev-aaa-17.reup",
+        "dev-aaa-18.reup",
+        "dev-aaa-19.reup",
+        "dev-aaa-20.reup"
+      ],
+      "device": "dev-aaa",
+      "priorSnapshotSeq": 10,
+      "limit": 32,
+      "expected": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup"
+      ]
+    },
+    {
+      "id": "prune-keeps-the-prior-snapshot-itself",
+      "names": [
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup",
+        "dev-aaa-10.reup",
+        "dev-aaa-11.reup",
+        "dev-aaa-12.reup"
+      ],
+      "device": "dev-aaa",
+      "priorSnapshotSeq": 10,
+      "limit": 32,
+      "expected": [
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup"
+      ]
+    },
+    {
+      "id": "prune-never-touches-another-device",
+      "names": [
+        "dev-bbb-1.reup",
+        "dev-bbb-2.reup",
+        "dev-bbb-3.reup",
+        "dev-bbb-4.reup",
+        "dev-bbb-5.reup",
+        "dev-bbb-6.reup",
+        "dev-bbb-7.reup",
+        "dev-bbb-8.reup",
+        "dev-bbb-9.reup",
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup"
+      ],
+      "device": "dev-aaa",
+      "priorSnapshotSeq": 5,
+      "limit": 32,
+      "expected": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup"
+      ]
+    },
+    {
+      "id": "prune-ignores-strangers",
+      "names": [
+        "holiday.jpg",
+        "dev-aaa-2.reup",
+        "readme"
+      ],
+      "device": "dev-aaa",
+      "priorSnapshotSeq": 9,
+      "limit": 32,
+      "expected": [
+        "dev-aaa-2.reup"
+      ]
+    },
+    {
+      "id": "prune-takes-the-oldest-first-and-stops",
+      "names": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup",
+        "dev-aaa-10.reup",
+        "dev-aaa-11.reup",
+        "dev-aaa-12.reup",
+        "dev-aaa-13.reup",
+        "dev-aaa-14.reup",
+        "dev-aaa-15.reup",
+        "dev-aaa-16.reup",
+        "dev-aaa-17.reup",
+        "dev-aaa-18.reup",
+        "dev-aaa-19.reup",
+        "dev-aaa-20.reup",
+        "dev-aaa-21.reup",
+        "dev-aaa-22.reup",
+        "dev-aaa-23.reup",
+        "dev-aaa-24.reup",
+        "dev-aaa-25.reup",
+        "dev-aaa-26.reup",
+        "dev-aaa-27.reup",
+        "dev-aaa-28.reup",
+        "dev-aaa-29.reup",
+        "dev-aaa-30.reup",
+        "dev-aaa-31.reup",
+        "dev-aaa-32.reup",
+        "dev-aaa-33.reup",
+        "dev-aaa-34.reup",
+        "dev-aaa-35.reup",
+        "dev-aaa-36.reup",
+        "dev-aaa-37.reup",
+        "dev-aaa-38.reup",
+        "dev-aaa-39.reup",
+        "dev-aaa-40.reup"
+      ],
+      "device": "dev-aaa",
+      "priorSnapshotSeq": 40,
+      "limit": 32,
+      "expected": [
+        "dev-aaa-1.reup",
+        "dev-aaa-2.reup",
+        "dev-aaa-3.reup",
+        "dev-aaa-4.reup",
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup",
+        "dev-aaa-10.reup",
+        "dev-aaa-11.reup",
+        "dev-aaa-12.reup",
+        "dev-aaa-13.reup",
+        "dev-aaa-14.reup",
+        "dev-aaa-15.reup",
+        "dev-aaa-16.reup",
+        "dev-aaa-17.reup",
+        "dev-aaa-18.reup",
+        "dev-aaa-19.reup",
+        "dev-aaa-20.reup",
+        "dev-aaa-21.reup",
+        "dev-aaa-22.reup",
+        "dev-aaa-23.reup",
+        "dev-aaa-24.reup",
+        "dev-aaa-25.reup",
+        "dev-aaa-26.reup",
+        "dev-aaa-27.reup",
+        "dev-aaa-28.reup",
+        "dev-aaa-29.reup",
+        "dev-aaa-30.reup",
+        "dev-aaa-31.reup",
+        "dev-aaa-32.reup"
+      ]
+    },
+    {
+      "id": "prune-with-nothing-to-do",
+      "names": [
+        "dev-aaa-5.reup",
+        "dev-aaa-6.reup",
+        "dev-aaa-7.reup",
+        "dev-aaa-8.reup",
+        "dev-aaa-9.reup"
+      ],
+      "device": "dev-aaa",
+      "priorSnapshotSeq": 5,
+      "limit": 32,
+      "expected": []
+    }
+  ],
+  "decode": [
+    {
+      "id": "decode-good",
+      "text": "{\"version\":1,\"device\":\"dev-bbb\",\"seq\":3,\"writtenAt\":\"2026-08-15T12:00:00.000Z\",\"changes\":[{\"table\":\"tasks\",\"uid\":\"u1\",\"updatedAt\":\"2026-08-14T09:00:00.000Z\",\"deleted\":false,\"origin\":\"dev-aaa\",\"fields\":{\"name\":\"mine\",\"category\":\"game\",\"reset_type\":\"daily\",\"reset_time\":\"04:00\",\"is_active\":1,\"completed_until\":null,\"cycle_checked_until\":null,\"missed_streak\":0}}]}",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "decode-empty-batch-is-legal",
+      "text": "{\"version\":1,\"device\":\"dev-bbb\",\"seq\":3,\"writtenAt\":\"2026-08-15T12:00:00.000Z\",\"changes\":[]}",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "decode-future-version",
+      "text": "{\"version\":2,\"device\":\"dev-bbb\",\"seq\":3,\"writtenAt\":\"2026-08-15T12:00:00.000Z\",\"changes\":[{\"table\":\"tasks\",\"uid\":\"u1\",\"updatedAt\":\"2026-08-14T09:00:00.000Z\",\"deleted\":false,\"origin\":\"dev-aaa\",\"fields\":{\"name\":\"mine\",\"category\":\"game\",\"reset_type\":\"daily\",\"reset_time\":\"04:00\",\"is_active\":1,\"completed_until\":null,\"cycle_checked_until\":null,\"missed_streak\":0}}]}",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": false,
+        "kind": "version"
+      }
+    },
+    {
+      "id": "decode-wrong-device",
+      "text": "{\"version\":1,\"device\":\"dev-ccc\",\"seq\":3,\"writtenAt\":\"2026-08-15T12:00:00.000Z\",\"changes\":[{\"table\":\"tasks\",\"uid\":\"u1\",\"updatedAt\":\"2026-08-14T09:00:00.000Z\",\"deleted\":false,\"origin\":\"dev-aaa\",\"fields\":{\"name\":\"mine\",\"category\":\"game\",\"reset_type\":\"daily\",\"reset_time\":\"04:00\",\"is_active\":1,\"completed_until\":null,\"cycle_checked_until\":null,\"missed_streak\":0}}]}",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": false,
+        "kind": "mismatch"
+      }
+    },
+    {
+      "id": "decode-wrong-seq",
+      "text": "{\"version\":1,\"device\":\"dev-bbb\",\"seq\":4,\"writtenAt\":\"2026-08-15T12:00:00.000Z\",\"changes\":[{\"table\":\"tasks\",\"uid\":\"u1\",\"updatedAt\":\"2026-08-14T09:00:00.000Z\",\"deleted\":false,\"origin\":\"dev-aaa\",\"fields\":{\"name\":\"mine\",\"category\":\"game\",\"reset_type\":\"daily\",\"reset_time\":\"04:00\",\"is_active\":1,\"completed_until\":null,\"cycle_checked_until\":null,\"missed_streak\":0}}]}",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": false,
+        "kind": "mismatch"
+      }
+    },
+    {
+      "id": "decode-not-json",
+      "text": "{ this is not json",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": false,
+        "kind": "format"
+      }
+    },
+    {
+      "id": "decode-missing-uid",
+      "text": "{\"version\":1,\"device\":\"dev-bbb\",\"seq\":3,\"writtenAt\":\"2026-08-15T12:00:00.000Z\",\"changes\":[{\"table\":\"tasks\",\"uid\":\"\",\"updatedAt\":\"2026-08-14T09:00:00.000Z\",\"deleted\":false,\"origin\":\"dev-aaa\",\"fields\":{\"name\":\"mine\",\"category\":\"game\",\"reset_type\":\"daily\",\"reset_time\":\"04:00\",\"is_active\":1,\"completed_until\":null,\"cycle_checked_until\":null,\"missed_streak\":0}}]}",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": false,
+        "kind": "format"
+      }
+    },
+    {
+      "id": "decode-nested-field-is-not-a-column",
+      "text": "{\"version\":1,\"device\":\"dev-bbb\",\"seq\":3,\"writtenAt\":\"2026-08-15T12:00:00.000Z\",\"changes\":[{\"table\":\"tasks\",\"uid\":\"u1\",\"updatedAt\":\"2026-08-14T09:00:00.000Z\",\"deleted\":false,\"origin\":\"dev-aaa\",\"fields\":{\"name\":{\"a\":1}}}]}",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": false,
+        "kind": "format"
+      }
+    },
+    {
+      "id": "decode-deleted-must-be-a-boolean",
+      "text": "{\"version\":1,\"device\":\"dev-bbb\",\"seq\":3,\"writtenAt\":\"2026-08-15T12:00:00.000Z\",\"changes\":[{\"table\":\"tasks\",\"uid\":\"u1\",\"updatedAt\":\"2026-08-14T09:00:00.000Z\",\"deleted\":1,\"origin\":\"dev-aaa\",\"fields\":{\"name\":\"mine\",\"category\":\"game\",\"reset_type\":\"daily\",\"reset_time\":\"04:00\",\"is_active\":1,\"completed_until\":null,\"cycle_checked_until\":null,\"missed_streak\":0}}]}",
+      "file": {
+        "name": "dev-bbb-3.reup",
+        "device": "dev-bbb",
+        "seq": 3
+      },
+      "expected": {
+        "ok": false,
+        "kind": "format"
+      }
+    }
+  ]
+}

@@ -1,0 +1,3703 @@
+{
+  "version": 1,
+  "generatedBy": "gen-store-vectors.ts",
+  "migrations": [
+    {
+      "sql": "CREATE TABLE IF NOT EXISTS sync_clock ( id INTEGER PRIMARY KEY CHECK (id = 1), t TEXT NOT NULL )",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT OR IGNORE INTO sync_clock (id, t) VALUES (1, '1970-01-01T00:00:00.000Z')",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TABLE IF NOT EXISTS sync_outbox ( tbl TEXT NOT NULL, uid TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (tbl, uid) )",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TABLE IF NOT EXISTS sync_outbox_state ( id INTEGER PRIMARY KEY CHECK (id = 1), seeded INTEGER NOT NULL DEFAULT 0 )",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT OR IGNORE INTO sync_outbox_state (id, seeded) VALUES (1, 0)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TABLE IF NOT EXISTS sync_spill ( tbl TEXT NOT NULL, uid TEXT NOT NULL, cols TEXT NOT NULL, PRIMARY KEY (tbl, uid) )",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE tasks ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE tasks ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE tasks ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE tasks SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', COALESCE(updated_at, created_at)), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_uid ON tasks(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS tasks_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS tasks_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS tasks_sync_insert AFTER INSERT ON tasks FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE tasks SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS tasks_sync_update AFTER UPDATE ON tasks FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE tasks SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS tasks_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS tasks_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS tasks_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS tasks_outbox_insert AFTER INSERT ON tasks FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'tasks', uid, updated_at FROM tasks WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS tasks_outbox_update AFTER UPDATE ON tasks FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'tasks', uid, updated_at FROM tasks WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS tasks_outbox_delete AFTER DELETE ON tasks FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'tasks' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE income ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE income ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE income ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE income SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', COALESCE(updated_at, created_at)), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_income_uid ON income(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_income_updated ON income(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS income_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS income_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS income_sync_insert AFTER INSERT ON income FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE income SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS income_sync_update AFTER UPDATE ON income FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE income SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS income_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS income_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS income_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS income_outbox_insert AFTER INSERT ON income FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'income', uid, updated_at FROM income WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS income_outbox_update AFTER UPDATE ON income FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'income', uid, updated_at FROM income WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS income_outbox_delete AFTER DELETE ON income FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'income' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE expenses ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE expenses ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE expenses ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE expenses SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', COALESCE(updated_at, created_at)), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_uid ON expenses(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_expenses_updated ON expenses(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expenses_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expenses_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expenses_sync_insert AFTER INSERT ON expenses FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE expenses SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expenses_sync_update AFTER UPDATE ON expenses FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE expenses SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expenses_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expenses_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expenses_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expenses_outbox_insert AFTER INSERT ON expenses FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expenses', uid, updated_at FROM expenses WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expenses_outbox_update AFTER UPDATE ON expenses FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expenses', uid, updated_at FROM expenses WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expenses_outbox_delete AFTER DELETE ON expenses FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'expenses' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE budgets ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE budgets ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE budgets ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE budgets SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', updated_at), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_uid ON budgets(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_budgets_updated ON budgets(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS budgets_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS budgets_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS budgets_sync_insert AFTER INSERT ON budgets FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE budgets SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS budgets_sync_update AFTER UPDATE ON budgets FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE budgets SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS budgets_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS budgets_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS budgets_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS budgets_outbox_insert AFTER INSERT ON budgets FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'budgets', uid, updated_at FROM budgets WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS budgets_outbox_update AFTER UPDATE ON budgets FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'budgets', uid, updated_at FROM budgets WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS budgets_outbox_delete AFTER DELETE ON budgets FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'budgets' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE saving_goals ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE saving_goals ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE saving_goals ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE saving_goals SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', COALESCE(updated_at, created_at)), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_saving_goals_uid ON saving_goals(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_saving_goals_updated ON saving_goals(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS saving_goals_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS saving_goals_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS saving_goals_sync_insert AFTER INSERT ON saving_goals FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE saving_goals SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS saving_goals_sync_update AFTER UPDATE ON saving_goals FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE saving_goals SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS saving_goals_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS saving_goals_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS saving_goals_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS saving_goals_outbox_insert AFTER INSERT ON saving_goals FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'saving_goals', uid, updated_at FROM saving_goals WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS saving_goals_outbox_update AFTER UPDATE ON saving_goals FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'saving_goals', uid, updated_at FROM saving_goals WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS saving_goals_outbox_delete AFTER DELETE ON saving_goals FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'saving_goals' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE expense_categories ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE expense_categories ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE expense_categories ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE expense_categories SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', updated_at), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_expense_categories_uid ON expense_categories(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_expense_categories_updated ON expense_categories(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expense_categories_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expense_categories_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expense_categories_sync_insert AFTER INSERT ON expense_categories FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE expense_categories SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expense_categories_sync_update AFTER UPDATE ON expense_categories FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE expense_categories SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expense_categories_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expense_categories_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expense_categories_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expense_categories_outbox_insert AFTER INSERT ON expense_categories FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expense_categories', uid, updated_at FROM expense_categories WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expense_categories_outbox_update AFTER UPDATE ON expense_categories FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expense_categories', uid, updated_at FROM expense_categories WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expense_categories_outbox_delete AFTER DELETE ON expense_categories FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'expense_categories' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE expected_income ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE expected_income ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE expected_income SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', COALESCE(updated_at, created_at)), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_expected_income_uid ON expected_income(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_expected_income_updated ON expected_income(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expected_income_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expected_income_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expected_income_sync_insert AFTER INSERT ON expected_income FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE expected_income SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expected_income_sync_update AFTER UPDATE ON expected_income FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE expected_income SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expected_income_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expected_income_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS expected_income_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expected_income_outbox_insert AFTER INSERT ON expected_income FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expected_income', uid, updated_at FROM expected_income WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expected_income_outbox_update AFTER UPDATE ON expected_income FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expected_income', uid, updated_at FROM expected_income WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS expected_income_outbox_delete AFTER DELETE ON expected_income FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'expected_income' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE task_events ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE task_events ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE task_events ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE task_events SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', updated_at), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_task_events_uid ON task_events(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_task_events_updated ON task_events(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS task_events_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS task_events_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS task_events_sync_insert AFTER INSERT ON task_events FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE task_events SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS task_events_sync_update AFTER UPDATE ON task_events FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE task_events SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS task_events_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS task_events_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS task_events_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS task_events_outbox_insert AFTER INSERT ON task_events FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'task_events', uid, updated_at FROM task_events WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS task_events_outbox_update AFTER UPDATE ON task_events FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'task_events', uid, updated_at FROM task_events WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS task_events_outbox_delete AFTER DELETE ON task_events FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'task_events' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "ALTER TABLE user_settings ADD COLUMN uid TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE user_settings ADD COLUMN updated_at TEXT",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "ALTER TABLE user_settings ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+      "ignoreErrors": true
+    },
+    {
+      "sql": "UPDATE user_settings SET uid = COALESCE(uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', updated_at), (SELECT t FROM sync_clock WHERE id = 1)) WHERE uid IS NULL OR updated_at IS NULL",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_settings_uid ON user_settings(uid)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE INDEX IF NOT EXISTS idx_user_settings_updated ON user_settings(updated_at)",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS user_settings_sync_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS user_settings_sync_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS user_settings_sync_insert AFTER INSERT ON user_settings FOR EACH ROW WHEN NEW.uid IS NULL OR NEW.updated_at IS NULL BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE user_settings SET uid = COALESCE(NEW.uid, ( lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) )), updated_at = COALESCE(NEW.updated_at, (SELECT t FROM sync_clock WHERE id = 1)) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS user_settings_sync_update AFTER UPDATE ON user_settings FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at BEGIN UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1; UPDATE user_settings SET updated_at = (SELECT t FROM sync_clock WHERE id = 1) WHERE id = NEW.id; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS user_settings_outbox_insert",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS user_settings_outbox_update",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "DROP TRIGGER IF EXISTS user_settings_outbox_delete",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS user_settings_outbox_insert AFTER INSERT ON user_settings FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'user_settings', uid, updated_at FROM user_settings WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS user_settings_outbox_update AFTER UPDATE ON user_settings FOR EACH ROW BEGIN INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'user_settings', uid, updated_at FROM user_settings WHERE id = NEW.id AND uid IS NOT NULL AND updated_at IS NOT NULL ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "CREATE TRIGGER IF NOT EXISTS user_settings_outbox_delete AFTER DELETE ON user_settings FOR EACH ROW BEGIN DELETE FROM sync_outbox WHERE tbl = 'user_settings' AND uid = OLD.uid; END;",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'tasks', uid, updated_at FROM tasks WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'income', uid, updated_at FROM income WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expenses', uid, updated_at FROM expenses WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'budgets', uid, updated_at FROM budgets WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'saving_goals', uid, updated_at FROM saving_goals WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expense_categories', uid, updated_at FROM expense_categories WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expected_income', uid, updated_at FROM expected_income WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'task_events', uid, updated_at FROM task_events WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'user_settings', uid, updated_at FROM user_settings WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "UPDATE sync_outbox_state SET seeded = 1 WHERE id = 1",
+      "ignoreErrors": false
+    }
+  ],
+  "clock": [
+    "UPDATE sync_clock SET t = max(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', t, '+0.001 seconds')) WHERE id = 1",
+    "SELECT t FROM sync_clock WHERE id = 1",
+    "UPDATE sync_clock SET t = max(t, ?) WHERE id = 1"
+  ],
+  "reseed": [
+    {
+      "sql": "UPDATE sync_outbox_state SET seeded = 0 WHERE id = 1",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'tasks', uid, updated_at FROM tasks WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'income', uid, updated_at FROM income WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expenses', uid, updated_at FROM expenses WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'budgets', uid, updated_at FROM budgets WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'saving_goals', uid, updated_at FROM saving_goals WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expense_categories', uid, updated_at FROM expense_categories WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'expected_income', uid, updated_at FROM expected_income WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'task_events', uid, updated_at FROM task_events WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "INSERT INTO sync_outbox (tbl, uid, updated_at) SELECT 'user_settings', uid, updated_at FROM user_settings WHERE uid IS NOT NULL AND updated_at IS NOT NULL AND (SELECT seeded FROM sync_outbox_state WHERE id = 1) = 0 ON CONFLICT (tbl, uid) DO UPDATE SET updated_at = excluded.updated_at",
+      "ignoreErrors": false
+    },
+    {
+      "sql": "UPDATE sync_outbox_state SET seeded = 1 WHERE id = 1",
+      "ignoreErrors": false
+    }
+  ],
+  "quiet": [
+    {
+      "raw": null,
+      "expected": {
+        "kind": "unknown"
+      }
+    },
+    {
+      "raw": "",
+      "expected": {
+        "kind": "unknown"
+      }
+    },
+    {
+      "raw": "not json",
+      "expected": {
+        "kind": "unknown"
+      }
+    },
+    {
+      "raw": "[]",
+      "expected": {
+        "kind": "unknown"
+      }
+    },
+    {
+      "raw": "{}",
+      "expected": {
+        "kind": "unknown"
+      }
+    },
+    {
+      "raw": "{\"start\":\"23:00\",\"end\":\"08:00\"}",
+      "expected": {
+        "kind": "unknown"
+      }
+    },
+    {
+      "raw": "{\"enabled\":false}",
+      "expected": {
+        "kind": "off"
+      }
+    },
+    {
+      "raw": "{\"enabled\":false,\"start\":\"23:00\",\"end\":\"08:00\"}",
+      "expected": {
+        "kind": "off"
+      }
+    },
+    {
+      "raw": "{\"enabled\":\"true\",\"start\":\"23:00\",\"end\":\"08:00\"}",
+      "expected": {
+        "kind": "off"
+      }
+    },
+    {
+      "raw": "{\"enabled\":1,\"start\":\"23:00\",\"end\":\"08:00\"}",
+      "expected": {
+        "kind": "off"
+      }
+    },
+    {
+      "raw": "{\"enabled\":null,\"start\":\"23:00\",\"end\":\"08:00\"}",
+      "expected": {
+        "kind": "off"
+      }
+    },
+    {
+      "raw": "{\"enabled\":true,\"start\":\"23:00\",\"end\":\"08:00\"}",
+      "expected": {
+        "kind": "window",
+        "start": "23:00",
+        "end": "08:00"
+      }
+    },
+    {
+      "raw": "{\"enabled\":true,\"start\":\"08:00\",\"end\":\"08:00\"}",
+      "expected": {
+        "kind": "off"
+      }
+    },
+    {
+      "raw": "{\"enabled\":true,\"start\":\"7:00\",\"end\":\"08:00\"}",
+      "expected": {
+        "kind": "unknown"
+      }
+    },
+    {
+      "raw": "{\"enabled\":true,\"start\":\"23:00\"}",
+      "expected": {
+        "kind": "unknown"
+      }
+    },
+    {
+      "raw": "{\"enabled\":true,\"start\":\"00:00\",\"end\":\"23:59\"}",
+      "expected": {
+        "kind": "window",
+        "start": "00:00",
+        "end": "23:59"
+      }
+    }
+  ],
+  "sanitizeText": [
+    {
+      "raw": null,
+      "expected": null
+    },
+    {
+      "raw": "",
+      "expected": null
+    },
+    {
+      "raw": "2026-08-19",
+      "expected": "2026-08-19"
+    },
+    {
+      "raw": "07:30",
+      "expected": "07:30"
+    },
+    {
+      "raw": "2026-08-19T07:30:00.123Z",
+      "expected": "2026-08-19T07:30:00Z"
+    },
+    {
+      "raw": "2026-08-19T07:30:00Z",
+      "expected": "2026-08-19T07:30:00Z"
+    },
+    {
+      "raw": "2026-08-19T07:30:00.123+07:00",
+      "expected": "2026-08-19T07:30:00+07:00"
+    },
+    {
+      "raw": "2026-08-19T07:30:00+07:00",
+      "expected": "2026-08-19T07:30:00+07:00"
+    },
+    {
+      "raw": "2026-08-19T07:30:00.123",
+      "expected": "2026-08-19T07:30:00"
+    },
+    {
+      "raw": "2026-08-19T07:30:00",
+      "expected": "2026-08-19T07:30:00"
+    },
+    {
+      "raw": "2026-08-19 07:30:00",
+      "expected": "2026-08-19T07:30:00"
+    },
+    {
+      "raw": "whatever",
+      "expected": "whatever"
+    }
+  ],
+  "taskColumns": [
+    "name",
+    "description",
+    "category",
+    "reset_type",
+    "reset_time",
+    "reset_day",
+    "reset_interval_days",
+    "anchor_date",
+    "event_start",
+    "event_end",
+    "specific_date",
+    "is_priority",
+    "is_urgent",
+    "min_step",
+    "time_zone",
+    "intent"
+  ],
+  "taskEditable": [
+    "name",
+    "description",
+    "notes",
+    "category",
+    "reset_type",
+    "reset_time",
+    "reset_day",
+    "reset_interval_days",
+    "anchor_date",
+    "event_start",
+    "event_end",
+    "specific_date",
+    "is_priority",
+    "is_urgent",
+    "min_step",
+    "time_zone",
+    "intent"
+  ],
+  "taskUpdate": [
+    {
+      "fields": {},
+      "columns": [],
+      "values": []
+    },
+    {
+      "fields": {
+        "name": "x"
+      },
+      "columns": [
+        "name"
+      ],
+      "values": [
+        "x"
+      ]
+    },
+    {
+      "fields": {
+        "nope": 1,
+        "name": "x"
+      },
+      "columns": [
+        "name"
+      ],
+      "values": [
+        "x"
+      ]
+    },
+    {
+      "fields": {
+        "is_priority": true,
+        "is_urgent": false
+      },
+      "columns": [
+        "is_priority",
+        "is_urgent"
+      ],
+      "values": [
+        1,
+        0
+      ]
+    },
+    {
+      "fields": {
+        "is_priority": 1,
+        "is_urgent": 0
+      },
+      "columns": [
+        "is_priority",
+        "is_urgent"
+      ],
+      "values": [
+        1,
+        0
+      ]
+    },
+    {
+      "fields": {
+        "reset_day": "0"
+      },
+      "columns": [
+        "reset_day"
+      ],
+      "values": [
+        0
+      ]
+    },
+    {
+      "fields": {
+        "reset_day": null
+      },
+      "columns": [
+        "reset_day"
+      ],
+      "values": [
+        null
+      ]
+    },
+    {
+      "fields": {
+        "min_step": ""
+      },
+      "columns": [
+        "min_step"
+      ],
+      "values": [
+        null
+      ]
+    },
+    {
+      "fields": {
+        "min_step": "ล้างจาน 1 ใบ"
+      },
+      "columns": [
+        "min_step"
+      ],
+      "values": [
+        "ล้างจาน 1 ใบ"
+      ]
+    },
+    {
+      "fields": {
+        "time_zone": null,
+        "intent": "want"
+      },
+      "columns": [
+        "time_zone",
+        "intent"
+      ],
+      "values": [
+        null,
+        "want"
+      ]
+    },
+    {
+      "fields": {
+        "intent": "maybe"
+      },
+      "columns": [
+        "intent"
+      ],
+      "values": [
+        null
+      ]
+    },
+    {
+      "fields": {
+        "notes": "hello"
+      },
+      "columns": [
+        "notes"
+      ],
+      "values": [
+        "hello"
+      ]
+    },
+    {
+      "fields": {
+        "specific_date": "2026-09-02",
+        "reset_time": "07:30"
+      },
+      "columns": [
+        "reset_time",
+        "specific_date"
+      ],
+      "values": [
+        "07:30",
+        "2026-09-02"
+      ]
+    },
+    {
+      "fields": {
+        "event_end": "2026-08-19T07:30:00.123Z"
+      },
+      "columns": [
+        "event_end"
+      ],
+      "values": [
+        "2026-08-19T07:30:00Z"
+      ]
+    },
+    {
+      "fields": {
+        "intent": "must",
+        "name": "z",
+        "reset_time": "01:00"
+      },
+      "columns": [
+        "name",
+        "reset_time",
+        "intent"
+      ],
+      "values": [
+        "z",
+        "01:00",
+        "must"
+      ]
+    }
+  ],
+  "taskDraft": [
+    {
+      "draft": {
+        "name": "ยาความดัน",
+        "reset_type": "daily",
+        "reset_time": "09:00"
+      },
+      "values": [
+        "ยาความดัน",
+        "",
+        null,
+        "daily",
+        "09:00",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "",
+        "reset_type": "daily"
+      },
+      "values": [
+        "",
+        "",
+        null,
+        "daily",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "name-empty"
+      ]
+    },
+    {
+      "draft": {
+        "name": "   ",
+        "reset_type": "daily"
+      },
+      "values": [
+        "   ",
+        "",
+        null,
+        "daily",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "name-empty"
+      ]
+    },
+    {
+      "draft": {
+        "name": "raid",
+        "reset_type": "weekly",
+        "reset_day": 1,
+        "reset_time": "05:00",
+        "is_priority": true
+      },
+      "values": [
+        "raid",
+        "",
+        null,
+        "weekly",
+        "05:00",
+        1,
+        null,
+        null,
+        null,
+        null,
+        null,
+        1,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "raid",
+        "reset_type": "weekly",
+        "reset_day": 0
+      },
+      "values": [
+        "raid",
+        "",
+        null,
+        "weekly",
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "raid",
+        "reset_type": "weekly"
+      },
+      "values": [
+        "raid",
+        "",
+        null,
+        "weekly",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "weekly-needs-day"
+      ]
+    },
+    {
+      "draft": {
+        "name": "raid",
+        "reset_type": "weekly",
+        "reset_day": 9
+      },
+      "values": [
+        "raid",
+        "",
+        null,
+        "weekly",
+        null,
+        9,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "day-out-of-range"
+      ]
+    },
+    {
+      "draft": {
+        "name": "raid",
+        "reset_type": "biweekly",
+        "reset_day": "3"
+      },
+      "values": [
+        "raid",
+        "",
+        null,
+        "biweekly",
+        null,
+        3,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "bins",
+        "reset_type": "custom_days",
+        "reset_interval_days": 14,
+        "anchor_date": "2026-08-01"
+      },
+      "values": [
+        "bins",
+        "",
+        null,
+        "custom_days",
+        null,
+        null,
+        14,
+        "2026-08-01",
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "bins",
+        "reset_type": "custom_days"
+      },
+      "values": [
+        "bins",
+        "",
+        null,
+        "custom_days",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "custom-needs-interval"
+      ]
+    },
+    {
+      "draft": {
+        "name": "bins",
+        "reset_type": "custom_days",
+        "reset_interval_days": 0
+      },
+      "values": [
+        "bins",
+        "",
+        null,
+        "custom_days",
+        null,
+        null,
+        0,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "interval-out-of-range"
+      ]
+    },
+    {
+      "draft": {
+        "name": "event",
+        "reset_type": "event_window",
+        "event_start": "2026-08-01T00:00:00+07:00",
+        "event_end": "2026-08-09T23:59:00+07:00"
+      },
+      "values": [
+        "event",
+        "",
+        null,
+        "event_window",
+        null,
+        null,
+        null,
+        null,
+        "2026-08-01T00:00:00+07:00",
+        "2026-08-09T23:59:00+07:00",
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "event",
+        "reset_type": "event_window",
+        "event_start": "2026-08-01"
+      },
+      "values": [
+        "event",
+        "",
+        null,
+        "event_window",
+        null,
+        null,
+        null,
+        null,
+        "2026-08-01",
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "event-needs-window"
+      ]
+    },
+    {
+      "draft": {
+        "name": "dentist",
+        "reset_type": "specific_date",
+        "specific_date": "2026-09-02"
+      },
+      "values": [
+        "dentist",
+        "",
+        null,
+        "specific_date",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "2026-09-02",
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "dentist",
+        "reset_type": "specific_date"
+      },
+      "values": [
+        "dentist",
+        "",
+        null,
+        "specific_date",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "date-missing"
+      ]
+    },
+    {
+      "draft": {
+        "name": "x",
+        "reset_type": "sometimes"
+      },
+      "values": [
+        "x",
+        "",
+        null,
+        "sometimes",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "reset-type-unknown"
+      ]
+    },
+    {
+      "draft": {
+        "name": "x",
+        "reset_type": "daily",
+        "reset_time": "9:00"
+      },
+      "values": [
+        "x",
+        "",
+        null,
+        "daily",
+        "9:00",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": [
+        "time-malformed"
+      ]
+    },
+    {
+      "draft": {
+        "name": "x",
+        "reset_type": "daily",
+        "intent": "want"
+      },
+      "values": [
+        "x",
+        "",
+        null,
+        "daily",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        "want"
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "x",
+        "reset_type": "daily",
+        "intent": "maybe"
+      },
+      "values": [
+        "x",
+        "",
+        null,
+        "daily",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "x",
+        "reset_type": "daily",
+        "is_urgent": 1,
+        "description": "",
+        "category": "personal"
+      },
+      "values": [
+        "x",
+        "",
+        "personal",
+        "daily",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        1,
+        null,
+        null,
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "x",
+        "reset_type": "daily",
+        "min_step": "",
+        "time_zone": "Asia/Bangkok"
+      },
+      "values": [
+        "x",
+        "",
+        null,
+        "daily",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        "Asia/Bangkok",
+        null
+      ],
+      "problems": []
+    }
+  ],
+  "expenseCategories": [
+    "food",
+    "transport",
+    "other"
+  ],
+  "expenseColumns": [
+    "amount",
+    "currency",
+    "category",
+    "note",
+    "date",
+    "slip_ref"
+  ],
+  "expenseDraft": [
+    {
+      "draft": {
+        "amount": 60,
+        "currency": "THB",
+        "category": "food",
+        "note": "กาแฟ",
+        "date": "2026-08-19"
+      },
+      "values": [
+        60,
+        "THB",
+        "food",
+        "กาแฟ",
+        "2026-08-19",
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": "1200",
+        "currency": "THB",
+        "category": "food",
+        "note": "",
+        "date": "2026-08-19"
+      },
+      "values": [
+        1200,
+        "THB",
+        "food",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": " 45.50 ",
+        "currency": "THB",
+        "category": "transport",
+        "note": "",
+        "date": "2026-08-19"
+      },
+      "values": [
+        45.5,
+        "THB",
+        "transport",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": "",
+        "currency": "THB",
+        "category": "food",
+        "date": "2026-08-19"
+      },
+      "values": [
+        0,
+        "THB",
+        "food",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": [
+        "amount-missing"
+      ]
+    },
+    {
+      "draft": {
+        "amount": "abc",
+        "currency": "THB",
+        "category": "food",
+        "date": "2026-08-19"
+      },
+      "values": [
+        0,
+        "THB",
+        "food",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": [
+        "amount-not-a-number"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 0,
+        "currency": "THB",
+        "category": "food",
+        "date": "2026-08-19"
+      },
+      "values": [
+        0,
+        "THB",
+        "food",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": [
+        "amount-not-positive"
+      ]
+    },
+    {
+      "draft": {
+        "amount": -5,
+        "currency": "THB",
+        "category": "food",
+        "date": "2026-08-19"
+      },
+      "values": [
+        -5,
+        "THB",
+        "food",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": [
+        "amount-not-positive"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "currency": "THB",
+        "category": "gadgets",
+        "date": "2026-08-19"
+      },
+      "values": [
+        20,
+        "THB",
+        "other",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "currency": "THB",
+        "date": "2026-08-19"
+      },
+      "values": [
+        20,
+        "THB",
+        "other",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "currency": "THB",
+        "category": "",
+        "date": "2026-08-19"
+      },
+      "values": [
+        20,
+        "THB",
+        "other",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "category": "food",
+        "date": "2026-08-19"
+      },
+      "values": [
+        20,
+        "",
+        "food",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": [
+        "currency-missing"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "currency": "THB",
+        "category": "food"
+      },
+      "values": [
+        20,
+        "THB",
+        "food",
+        "",
+        "",
+        null
+      ],
+      "problems": [
+        "date-missing"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "currency": "THB",
+        "category": "food",
+        "date": "19/08/2026"
+      },
+      "values": [
+        20,
+        "THB",
+        "food",
+        "",
+        "19/08/2026",
+        null
+      ],
+      "problems": [
+        "date-malformed"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "currency": "THB",
+        "category": "food",
+        "date": "2026-08-19",
+        "slip_ref": ""
+      },
+      "values": [
+        20,
+        "THB",
+        "food",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "currency": "THB",
+        "category": "food",
+        "date": "2026-08-19",
+        "slip_ref": "REF123"
+      },
+      "values": [
+        20,
+        "THB",
+        "food",
+        "",
+        "2026-08-19",
+        "REF123"
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": 20,
+        "currency": "USD",
+        "category": "food",
+        "date": "2026-08-19",
+        "nope": 1
+      },
+      "values": [
+        20,
+        "USD",
+        "food",
+        "",
+        "2026-08-19",
+        null
+      ],
+      "problems": []
+    }
+  ],
+  "incomeColumns": [
+    "amount",
+    "source",
+    "note",
+    "date",
+    "currency"
+  ],
+  "incomeDraft": [
+    {
+      "draft": {
+        "amount": 6516,
+        "source": "TELUS",
+        "note": "",
+        "date": "2026-08-19",
+        "currency": "THB"
+      },
+      "values": [
+        6516,
+        "TELUS",
+        "",
+        "2026-08-19",
+        "THB"
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": "180",
+        "source": "3Play",
+        "note": "test 2",
+        "date": "2026-08-19",
+        "currency": "USD"
+      },
+      "values": [
+        180,
+        "3Play",
+        "test 2",
+        "2026-08-19",
+        "USD"
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": 100,
+        "source": "",
+        "date": "2026-08-19",
+        "currency": "THB"
+      },
+      "values": [
+        100,
+        "",
+        "",
+        "2026-08-19",
+        "THB"
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": 100,
+        "date": "2026-08-19",
+        "currency": "THB"
+      },
+      "values": [
+        100,
+        "",
+        "",
+        "2026-08-19",
+        "THB"
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "amount": "",
+        "source": "x",
+        "date": "2026-08-19",
+        "currency": "THB"
+      },
+      "values": [
+        0,
+        "x",
+        "",
+        "2026-08-19",
+        "THB"
+      ],
+      "problems": [
+        "amount-missing"
+      ]
+    },
+    {
+      "draft": {
+        "amount": "abc",
+        "source": "x",
+        "date": "2026-08-19",
+        "currency": "THB"
+      },
+      "values": [
+        0,
+        "x",
+        "",
+        "2026-08-19",
+        "THB"
+      ],
+      "problems": [
+        "amount-not-a-number"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 0,
+        "source": "x",
+        "date": "2026-08-19",
+        "currency": "THB"
+      },
+      "values": [
+        0,
+        "x",
+        "",
+        "2026-08-19",
+        "THB"
+      ],
+      "problems": [
+        "amount-not-positive"
+      ]
+    },
+    {
+      "draft": {
+        "amount": -5,
+        "source": "x",
+        "date": "2026-08-19",
+        "currency": "THB"
+      },
+      "values": [
+        -5,
+        "x",
+        "",
+        "2026-08-19",
+        "THB"
+      ],
+      "problems": [
+        "amount-not-positive"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 100,
+        "source": "x",
+        "date": "2026-08-19"
+      },
+      "values": [
+        100,
+        "x",
+        "",
+        "2026-08-19",
+        ""
+      ],
+      "problems": [
+        "currency-missing"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 100,
+        "source": "x",
+        "currency": "THB"
+      },
+      "values": [
+        100,
+        "x",
+        "",
+        "",
+        "THB"
+      ],
+      "problems": [
+        "date-missing"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 100,
+        "source": "x",
+        "date": "19/08/2026",
+        "currency": "THB"
+      },
+      "values": [
+        100,
+        "x",
+        "",
+        "19/08/2026",
+        "THB"
+      ],
+      "problems": [
+        "date-malformed"
+      ]
+    },
+    {
+      "draft": {
+        "amount": 100,
+        "source": "x",
+        "date": "2026-08-19",
+        "currency": "THB",
+        "nope": 1
+      },
+      "values": [
+        100,
+        "x",
+        "",
+        "2026-08-19",
+        "THB"
+      ],
+      "problems": []
+    }
+  ],
+  "moneyQueries": [
+    "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE deleted = 0 AND currency = ? AND strftime('%Y-%m', date) = ?",
+    "SELECT COALESCE(SUM(amount), 0) as total FROM income WHERE deleted = 0 AND currency = ? AND strftime('%Y-%m', date) = ?",
+    "SELECT COUNT(*) as n FROM (SELECT currency FROM expenses WHERE deleted = 0 AND currency != ? AND strftime('%Y-%m', date) = ? UNION ALL SELECT currency FROM income WHERE deleted = 0 AND currency != ? AND strftime('%Y-%m', date) = ?)",
+    "SELECT kind, uid, date, amount, currency, tag, note FROM (SELECT 'out' as kind, uid, date, amount, currency, created_at, category as tag, note FROM expenses WHERE deleted = 0 UNION ALL SELECT 'in' as kind, uid, date, amount, currency, created_at, source as tag, note FROM income WHERE deleted = 0) ORDER BY date DESC, created_at DESC, uid DESC LIMIT 20"
+  ],
+  "moneyFallbacks": [
+    "THB",
+    "other"
+  ],
+  "shapes": [
+    {
+      "name": "tasks",
+      "columns": [
+        "id",
+        "name",
+        "description",
+        "category",
+        "reset_type",
+        "reset_time",
+        "reset_day",
+        "reset_interval_days",
+        "anchor_date",
+        "event_start",
+        "event_end",
+        "specific_date",
+        "is_priority",
+        "is_urgent",
+        "is_active",
+        "completed_until",
+        "completed_at",
+        "created_at",
+        "notes",
+        "time_zone",
+        "intent",
+        "cycle_checked_until",
+        "missed_streak",
+        "min_step",
+        "paused_until",
+        "deleted_at",
+        "uid",
+        "updated_at",
+        "deleted"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "name": "TEXT",
+        "description": "TEXT",
+        "category": "TEXT",
+        "reset_type": "TEXT",
+        "reset_time": "TEXT",
+        "reset_day": "INTEGER",
+        "reset_interval_days": "INTEGER",
+        "anchor_date": "TEXT",
+        "event_start": "TEXT",
+        "event_end": "TEXT",
+        "specific_date": "TEXT",
+        "is_priority": "INTEGER",
+        "is_urgent": "INTEGER",
+        "is_active": "INTEGER",
+        "completed_until": "TEXT",
+        "completed_at": "TEXT",
+        "created_at": "TEXT",
+        "notes": "TEXT",
+        "time_zone": "TEXT",
+        "intent": "TEXT",
+        "cycle_checked_until": "TEXT",
+        "missed_streak": "INTEGER",
+        "min_step": "TEXT",
+        "paused_until": "TEXT",
+        "deleted_at": "TEXT",
+        "uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted": "INTEGER"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [],
+      "payloadColumns": [
+        "name",
+        "description",
+        "category",
+        "reset_type",
+        "reset_time",
+        "reset_day",
+        "reset_interval_days",
+        "anchor_date",
+        "event_start",
+        "event_end",
+        "specific_date",
+        "is_priority",
+        "is_urgent",
+        "is_active",
+        "completed_until",
+        "completed_at",
+        "created_at",
+        "notes",
+        "time_zone",
+        "intent",
+        "cycle_checked_until",
+        "missed_streak",
+        "min_step",
+        "paused_until",
+        "deleted_at"
+      ]
+    },
+    {
+      "name": "income",
+      "columns": [
+        "id",
+        "amount",
+        "source",
+        "note",
+        "date",
+        "created_at",
+        "currency",
+        "uid",
+        "updated_at",
+        "deleted"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "amount": "REAL",
+        "source": "TEXT",
+        "note": "TEXT",
+        "date": "TEXT",
+        "created_at": "TEXT",
+        "currency": "TEXT",
+        "uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted": "INTEGER"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [],
+      "payloadColumns": [
+        "amount",
+        "source",
+        "note",
+        "date",
+        "created_at",
+        "currency"
+      ]
+    },
+    {
+      "name": "expenses",
+      "columns": [
+        "id",
+        "amount",
+        "category",
+        "note",
+        "date",
+        "created_at",
+        "currency",
+        "slip_ref",
+        "uid",
+        "updated_at",
+        "deleted"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "amount": "REAL",
+        "category": "TEXT",
+        "note": "TEXT",
+        "date": "TEXT",
+        "created_at": "TEXT",
+        "currency": "TEXT",
+        "slip_ref": "TEXT",
+        "uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted": "INTEGER"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [
+        [
+          "slip_ref"
+        ]
+      ],
+      "payloadColumns": [
+        "amount",
+        "category",
+        "note",
+        "date",
+        "created_at",
+        "currency",
+        "slip_ref"
+      ]
+    },
+    {
+      "name": "budgets",
+      "columns": [
+        "id",
+        "category",
+        "limit_amount",
+        "month",
+        "currency",
+        "uid",
+        "updated_at",
+        "deleted"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "category": "TEXT",
+        "limit_amount": "REAL",
+        "month": "TEXT",
+        "currency": "TEXT",
+        "uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted": "INTEGER"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [
+        [
+          "category",
+          "month"
+        ]
+      ],
+      "payloadColumns": [
+        "category",
+        "limit_amount",
+        "month",
+        "currency"
+      ]
+    },
+    {
+      "name": "saving_goals",
+      "columns": [
+        "id",
+        "name",
+        "target_amount",
+        "current_amount",
+        "deadline",
+        "emoji",
+        "is_completed",
+        "created_at",
+        "currency",
+        "uid",
+        "updated_at",
+        "deleted"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "name": "TEXT",
+        "target_amount": "REAL",
+        "current_amount": "REAL",
+        "deadline": "TEXT",
+        "emoji": "TEXT",
+        "is_completed": "INTEGER",
+        "created_at": "TEXT",
+        "currency": "TEXT",
+        "uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted": "INTEGER"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [],
+      "payloadColumns": [
+        "name",
+        "target_amount",
+        "current_amount",
+        "deadline",
+        "emoji",
+        "is_completed",
+        "created_at",
+        "currency"
+      ]
+    },
+    {
+      "name": "expense_categories",
+      "columns": [
+        "id",
+        "key",
+        "label",
+        "emoji",
+        "color",
+        "sort_order",
+        "is_hidden",
+        "uid",
+        "updated_at",
+        "deleted"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "key": "TEXT",
+        "label": "TEXT",
+        "emoji": "TEXT",
+        "color": "TEXT",
+        "sort_order": "INTEGER",
+        "is_hidden": "INTEGER",
+        "uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted": "INTEGER"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [
+        [
+          "key"
+        ]
+      ],
+      "payloadColumns": [
+        "key",
+        "label",
+        "emoji",
+        "color",
+        "sort_order",
+        "is_hidden"
+      ]
+    },
+    {
+      "name": "expected_income",
+      "columns": [
+        "id",
+        "source",
+        "amount",
+        "currency",
+        "expect_date",
+        "repeat",
+        "note",
+        "status",
+        "created_at",
+        "deleted",
+        "uid",
+        "updated_at"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "source": "TEXT",
+        "amount": "REAL",
+        "currency": "TEXT",
+        "expect_date": "TEXT",
+        "repeat": "TEXT",
+        "note": "TEXT",
+        "status": "TEXT",
+        "created_at": "TEXT",
+        "deleted": "INTEGER",
+        "uid": "TEXT",
+        "updated_at": "TEXT"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [],
+      "payloadColumns": [
+        "source",
+        "amount",
+        "currency",
+        "expect_date",
+        "repeat",
+        "note",
+        "status",
+        "created_at"
+      ]
+    },
+    {
+      "name": "task_events",
+      "columns": [
+        "id",
+        "task_uid",
+        "kind",
+        "at",
+        "for_cycle",
+        "uid",
+        "updated_at",
+        "deleted"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "task_uid": "TEXT",
+        "kind": "TEXT",
+        "at": "TEXT",
+        "for_cycle": "TEXT",
+        "uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted": "INTEGER"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [],
+      "payloadColumns": [
+        "task_uid",
+        "kind",
+        "at",
+        "for_cycle"
+      ]
+    },
+    {
+      "name": "user_settings",
+      "columns": [
+        "id",
+        "key",
+        "value",
+        "uid",
+        "updated_at",
+        "deleted"
+      ],
+      "types": {
+        "id": "INTEGER",
+        "key": "TEXT",
+        "value": "TEXT",
+        "uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted": "INTEGER"
+      },
+      "hasDeleted": true,
+      "naturalKeys": [
+        [
+          "key"
+        ]
+      ],
+      "payloadColumns": [
+        "key",
+        "value"
+      ]
+    }
+  ],
+  "recordFromRow": [
+    {
+      "id": "row-live",
+      "table": "tasks",
+      "row": {
+        "id": 7,
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updated_at": "2026-08-15T09:00:00.000Z",
+        "deleted": 0,
+        "name": "dailies",
+        "reset_type": "daily",
+        "reset_time": "04:00",
+        "is_active": 1,
+        "completed_until": null
+      },
+      "origin": "d-1122334455667788",
+      "expected": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": null,
+          "category": null,
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "reset_interval_days": null,
+          "anchor_date": null,
+          "event_start": null,
+          "event_end": null,
+          "specific_date": null,
+          "is_priority": null,
+          "is_urgent": null,
+          "is_active": 1,
+          "completed_until": null,
+          "completed_at": null,
+          "created_at": null,
+          "notes": null,
+          "time_zone": null,
+          "intent": null,
+          "cycle_checked_until": null,
+          "missed_streak": null,
+          "min_step": null,
+          "paused_until": null,
+          "deleted_at": null
+        }
+      }
+    },
+    {
+      "id": "row-tombstone",
+      "table": "tasks",
+      "row": {
+        "id": 7,
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updated_at": "2026-08-15T09:00:00.000Z",
+        "deleted": 1,
+        "name": "dailies",
+        "reset_type": "daily",
+        "reset_time": "04:00",
+        "is_active": 1,
+        "completed_until": null
+      },
+      "origin": "d-1122334455667788",
+      "expected": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": null,
+          "category": null,
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "reset_interval_days": null,
+          "anchor_date": null,
+          "event_start": null,
+          "event_end": null,
+          "specific_date": null,
+          "is_priority": null,
+          "is_urgent": null,
+          "is_active": 1,
+          "completed_until": null,
+          "completed_at": null,
+          "created_at": null,
+          "notes": null,
+          "time_zone": null,
+          "intent": null,
+          "cycle_checked_until": null,
+          "missed_streak": null,
+          "min_step": null,
+          "paused_until": null,
+          "deleted_at": null
+        }
+      }
+    },
+    {
+      "id": "row-deleted-as-text",
+      "table": "tasks",
+      "row": {
+        "id": 7,
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updated_at": "2026-08-15T09:00:00.000Z",
+        "deleted": "1",
+        "name": "dailies",
+        "reset_type": "daily",
+        "reset_time": "04:00",
+        "is_active": 1,
+        "completed_until": null
+      },
+      "origin": "d-1122334455667788",
+      "expected": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": null,
+          "category": null,
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "reset_interval_days": null,
+          "anchor_date": null,
+          "event_start": null,
+          "event_end": null,
+          "specific_date": null,
+          "is_priority": null,
+          "is_urgent": null,
+          "is_active": 1,
+          "completed_until": null,
+          "completed_at": null,
+          "created_at": null,
+          "notes": null,
+          "time_zone": null,
+          "intent": null,
+          "cycle_checked_until": null,
+          "missed_streak": null,
+          "min_step": null,
+          "paused_until": null,
+          "deleted_at": null
+        }
+      }
+    }
+  ],
+  "upsert": [
+    {
+      "id": "upsert-task",
+      "table": "tasks",
+      "record": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": "",
+          "category": "game",
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "is_priority": 0,
+          "is_urgent": 1,
+          "is_active": 1,
+          "completed_until": null
+        }
+      },
+      "expected": {
+        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at",
+        "params": [
+          "11111111-1111-4111-8111-111111111111",
+          "2026-08-15T09:00:00.000Z",
+          0,
+          "dailies",
+          "",
+          "game",
+          "daily",
+          "04:00",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          1,
+          1,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "upsert-task-tombstone",
+      "table": "tasks",
+      "record": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": "",
+          "category": "game",
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "is_priority": 0,
+          "is_urgent": 1,
+          "is_active": 1,
+          "completed_until": null
+        }
+      },
+      "expected": {
+        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at",
+        "params": [
+          "11111111-1111-4111-8111-111111111111",
+          "2026-08-15T09:00:00.000Z",
+          1,
+          "dailies",
+          "",
+          "game",
+          "daily",
+          "04:00",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          1,
+          1,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "upsert-task-with-a-column-this-schema-does-not-have",
+      "table": "tasks",
+      "record": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": "",
+          "category": "game",
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "is_priority": 0,
+          "is_urgent": 1,
+          "is_active": 1,
+          "completed_until": null,
+          "invented_next_year": 5
+        }
+      },
+      "expected": {
+        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at",
+        "params": [
+          "11111111-1111-4111-8111-111111111111",
+          "2026-08-15T09:00:00.000Z",
+          0,
+          "dailies",
+          "",
+          "game",
+          "daily",
+          "04:00",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          1,
+          1,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "upsert-budget",
+      "table": "budgets",
+      "record": {
+        "table": "budgets",
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "food",
+          "limit_amount": 5000,
+          "month": "2026-08"
+        }
+      },
+      "expected": {
+        "sql": "INSERT INTO budgets (uid, updated_at, deleted, category, limit_amount, month, currency) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, category = excluded.category, limit_amount = excluded.limit_amount, month = excluded.month, currency = excluded.currency",
+        "params": [
+          "22222222-2222-4222-8222-222222222222",
+          "2026-08-15T09:00:00.000Z",
+          0,
+          "food",
+          5000,
+          "2026-08",
+          null
+        ]
+      }
+    },
+    {
+      "id": "upsert-expense",
+      "table": "expenses",
+      "record": {
+        "table": "expenses",
+        "uid": "33333333-3333-4333-8333-333333333333",
+        "updatedAt": "2026-08-15T10:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "amount": 1200,
+          "category": "food",
+          "note": "dog food",
+          "date": "2026-08-15"
+        }
+      },
+      "expected": {
+        "sql": "INSERT INTO expenses (uid, updated_at, deleted, amount, category, note, date, created_at, currency, slip_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, amount = excluded.amount, category = excluded.category, note = excluded.note, date = excluded.date, created_at = excluded.created_at, currency = excluded.currency, slip_ref = excluded.slip_ref",
+        "params": [
+          "33333333-3333-4333-8333-333333333333",
+          "2026-08-15T10:00:00.000Z",
+          0,
+          1200,
+          "food",
+          "dog food",
+          "2026-08-15",
+          null,
+          null,
+          null
+        ]
+      }
+    }
+  ],
+  "pending": [
+    {
+      "id": "pending-tasks",
+      "table": "tasks",
+      "expected": "SELECT r.* FROM tasks r JOIN sync_outbox o ON o.tbl = 'tasks' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    },
+    {
+      "id": "pending-income",
+      "table": "income",
+      "expected": "SELECT r.* FROM income r JOIN sync_outbox o ON o.tbl = 'income' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    },
+    {
+      "id": "pending-expenses",
+      "table": "expenses",
+      "expected": "SELECT r.* FROM expenses r JOIN sync_outbox o ON o.tbl = 'expenses' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    },
+    {
+      "id": "pending-budgets",
+      "table": "budgets",
+      "expected": "SELECT r.* FROM budgets r JOIN sync_outbox o ON o.tbl = 'budgets' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    },
+    {
+      "id": "pending-saving_goals",
+      "table": "saving_goals",
+      "expected": "SELECT r.* FROM saving_goals r JOIN sync_outbox o ON o.tbl = 'saving_goals' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    },
+    {
+      "id": "pending-expense_categories",
+      "table": "expense_categories",
+      "expected": "SELECT r.* FROM expense_categories r JOIN sync_outbox o ON o.tbl = 'expense_categories' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    },
+    {
+      "id": "pending-expected_income",
+      "table": "expected_income",
+      "expected": "SELECT r.* FROM expected_income r JOIN sync_outbox o ON o.tbl = 'expected_income' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    },
+    {
+      "id": "pending-task_events",
+      "table": "task_events",
+      "expected": "SELECT r.* FROM task_events r JOIN sync_outbox o ON o.tbl = 'task_events' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    },
+    {
+      "id": "pending-user_settings",
+      "table": "user_settings",
+      "expected": "SELECT r.* FROM user_settings r JOIN sync_outbox o ON o.tbl = 'user_settings' AND o.uid = r.uid ORDER BY r.updated_at ASC, r.uid ASC"
+    }
+  ],
+  "spill": [
+    {
+      "id": "spill-read-one",
+      "kind": "read",
+      "pairs": [
+        {
+          "table": "tasks",
+          "uid": "u-1"
+        }
+      ],
+      "expected": {
+        "sql": "SELECT tbl, uid, cols FROM sync_spill WHERE (tbl, uid) IN ((?, ?))",
+        "params": [
+          "tasks",
+          "u-1"
+        ]
+      }
+    },
+    {
+      "id": "spill-read-many",
+      "kind": "read",
+      "pairs": [
+        {
+          "table": "tasks",
+          "uid": "u-1"
+        },
+        {
+          "table": "expenses",
+          "uid": "u-2"
+        }
+      ],
+      "expected": {
+        "sql": "SELECT tbl, uid, cols FROM sync_spill WHERE (tbl, uid) IN ((?, ?), (?, ?))",
+        "params": [
+          "tasks",
+          "u-1",
+          "expenses",
+          "u-2"
+        ]
+      }
+    },
+    {
+      "id": "spill-write",
+      "kind": "write",
+      "table": "tasks",
+      "uid": "u-1",
+      "cols": "{\"mood_after\":3}",
+      "expected": {
+        "sql": "INSERT INTO sync_spill (tbl, uid, cols) VALUES (?, ?, ?) ON CONFLICT(tbl, uid) DO UPDATE SET cols = excluded.cols",
+        "params": [
+          "tasks",
+          "u-1",
+          "{\"mood_after\":3}"
+        ]
+      }
+    },
+    {
+      "id": "spill-drop",
+      "kind": "drop",
+      "table": "budgets",
+      "uid": "u-'2",
+      "expected": {
+        "sql": "DELETE FROM sync_spill WHERE tbl = ? AND uid = ?",
+        "params": [
+          "budgets",
+          "u-'2"
+        ]
+      }
+    }
+  ],
+  "settle": [
+    {
+      "id": "settle-task",
+      "table": "tasks",
+      "uid": "u-1",
+      "updatedAt": "2026-08-16T03:00:00.000Z",
+      "expected": {
+        "sql": "DELETE FROM sync_outbox WHERE tbl = ? AND uid = ? AND updated_at = ?",
+        "params": [
+          "tasks",
+          "u-1",
+          "2026-08-16T03:00:00.000Z"
+        ]
+      }
+    },
+    {
+      "id": "settle-budget",
+      "table": "budgets",
+      "uid": "u-2",
+      "updatedAt": "2026-08-16T03:00:00.001Z",
+      "expected": {
+        "sql": "DELETE FROM sync_outbox WHERE tbl = ? AND uid = ? AND updated_at = ?",
+        "params": [
+          "budgets",
+          "u-2",
+          "2026-08-16T03:00:00.001Z"
+        ]
+      }
+    },
+    {
+      "id": "settle-awkward-uid",
+      "table": "expenses",
+      "uid": "u-'3",
+      "updatedAt": "1970-01-01T00:00:00.000Z",
+      "expected": {
+        "sql": "DELETE FROM sync_outbox WHERE tbl = ? AND uid = ? AND updated_at = ?",
+        "params": [
+          "expenses",
+          "u-'3",
+          "1970-01-01T00:00:00.000Z"
+        ]
+      }
+    }
+  ],
+  "byUids": [
+    {
+      "id": "by-uids-one",
+      "table": "tasks",
+      "uids": [
+        "a"
+      ],
+      "expected": {
+        "sql": "SELECT * FROM tasks WHERE uid IN (?)",
+        "params": [
+          "a"
+        ]
+      }
+    },
+    {
+      "id": "by-uids-three",
+      "table": "expenses",
+      "uids": [
+        "a",
+        "b",
+        "c"
+      ],
+      "expected": {
+        "sql": "SELECT * FROM expenses WHERE uid IN (?, ?, ?)",
+        "params": [
+          "a",
+          "b",
+          "c"
+        ]
+      }
+    }
+  ],
+  "freeNaturalKeys": [
+    {
+      "id": "free-live-row-is-untouched",
+      "table": "budgets",
+      "record": {
+        "table": "budgets",
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "food",
+          "limit_amount": 5000,
+          "month": "2026-08"
+        }
+      },
+      "expected": {
+        "table": "budgets",
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "food",
+          "limit_amount": 5000,
+          "month": "2026-08"
+        }
+      }
+    },
+    {
+      "id": "free-budget-tombstone",
+      "table": "budgets",
+      "record": {
+        "table": "budgets",
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "food",
+          "limit_amount": 5000,
+          "month": "2026-08"
+        }
+      },
+      "expected": {
+        "table": "budgets",
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "deleted:22222222-2222-4222-8222-222222222222",
+          "limit_amount": 5000,
+          "month": "deleted:22222222-2222-4222-8222-222222222222"
+        }
+      }
+    },
+    {
+      "id": "free-task-tombstone-has-no-natural-key",
+      "table": "tasks",
+      "record": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": "",
+          "category": "game",
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "is_priority": 0,
+          "is_urgent": 1,
+          "is_active": 1,
+          "completed_until": null
+        }
+      },
+      "expected": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": "",
+          "category": "game",
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "is_priority": 0,
+          "is_urgent": 1,
+          "is_active": 1,
+          "completed_until": null
+        }
+      }
+    },
+    {
+      "id": "free-category-tombstone",
+      "table": "expense_categories",
+      "record": {
+        "table": "expense_categories",
+        "uid": "44444444-4444-4444-8444-444444444444",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "key": "food",
+          "label": null,
+          "emoji": "🍜",
+          "color": null,
+          "sort_order": 0,
+          "is_hidden": 0
+        }
+      },
+      "expected": {
+        "table": "expense_categories",
+        "uid": "44444444-4444-4444-8444-444444444444",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "key": "deleted:44444444-4444-4444-8444-444444444444",
+          "label": null,
+          "emoji": "🍜",
+          "color": null,
+          "sort_order": 0,
+          "is_hidden": 0
+        }
+      }
+    },
+    {
+      "id": "free-expense-tombstone-with-no-slip-keeps-it-null",
+      "table": "expenses",
+      "record": {
+        "table": "expenses",
+        "uid": "55555555-5555-4555-8555-555555555555",
+        "updatedAt": "2026-08-16T21:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "amount": 1200,
+          "category": "food",
+          "note": "",
+          "date": "2026-08-16",
+          "created_at": "2026-08-16 21:00:00",
+          "currency": "THB",
+          "slip_ref": null
+        }
+      },
+      "expected": {
+        "table": "expenses",
+        "uid": "55555555-5555-4555-8555-555555555555",
+        "updatedAt": "2026-08-16T21:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "amount": 1200,
+          "category": "food",
+          "note": "",
+          "date": "2026-08-16",
+          "created_at": "2026-08-16 21:00:00",
+          "currency": "THB",
+          "slip_ref": null
+        }
+      }
+    },
+    {
+      "id": "free-expense-tombstone-with-a-slip-releases-it",
+      "table": "expenses",
+      "record": {
+        "table": "expenses",
+        "uid": "55555555-5555-4555-8555-555555555555",
+        "updatedAt": "2026-08-16T21:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "amount": 1200,
+          "category": "food",
+          "note": "",
+          "date": "2026-08-16",
+          "created_at": "2026-08-16 21:00:00",
+          "currency": "THB",
+          "slip_ref": "slip-abc"
+        }
+      },
+      "expected": {
+        "table": "expenses",
+        "uid": "55555555-5555-4555-8555-555555555555",
+        "updatedAt": "2026-08-16T21:00:00.000Z",
+        "deleted": true,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "amount": 1200,
+          "category": "food",
+          "note": "",
+          "date": "2026-08-16",
+          "created_at": "2026-08-16 21:00:00",
+          "currency": "THB",
+          "slip_ref": "deleted:55555555-5555-4555-8555-555555555555"
+        }
+      }
+    }
+  ],
+  "clash": [
+    {
+      "id": "clash-same-key-incoming-uid-is-larger",
+      "table": "budgets",
+      "incoming": {
+        "table": "budgets",
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "food",
+          "limit_amount": 5000,
+          "month": "2026-08"
+        }
+      },
+      "existing": {
+        "id": 3,
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updated_at": "2026-08-15T08:00:00.000Z",
+        "deleted": 0,
+        "category": "food",
+        "limit_amount": 4000,
+        "month": "2026-08"
+      },
+      "expected": {
+        "clashes": true,
+        "incomingLoses": true
+      }
+    },
+    {
+      "id": "clash-same-key-incoming-uid-is-smaller",
+      "table": "budgets",
+      "incoming": {
+        "table": "budgets",
+        "uid": "00000000-0000-4000-8000-000000000000",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "food",
+          "limit_amount": 5000,
+          "month": "2026-08"
+        }
+      },
+      "existing": {
+        "id": 3,
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updated_at": "2026-08-15T08:00:00.000Z",
+        "deleted": 0,
+        "category": "food",
+        "limit_amount": 4000,
+        "month": "2026-08"
+      },
+      "expected": {
+        "clashes": true,
+        "incomingLoses": false
+      }
+    },
+    {
+      "id": "clash-same-uid-is-not-a-clash",
+      "table": "budgets",
+      "incoming": {
+        "table": "budgets",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "food",
+          "limit_amount": 5000,
+          "month": "2026-08"
+        }
+      },
+      "existing": {
+        "id": 3,
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updated_at": "2026-08-15T08:00:00.000Z",
+        "deleted": 0,
+        "category": "food",
+        "limit_amount": 4000,
+        "month": "2026-08"
+      },
+      "expected": {
+        "clashes": false,
+        "incomingLoses": false
+      }
+    },
+    {
+      "id": "clash-different-month-is-not-a-clash",
+      "table": "budgets",
+      "incoming": {
+        "table": "budgets",
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "category": "food",
+          "limit_amount": 5000,
+          "month": "2026-09"
+        }
+      },
+      "existing": {
+        "id": 3,
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updated_at": "2026-08-15T08:00:00.000Z",
+        "deleted": 0,
+        "category": "food",
+        "limit_amount": 4000,
+        "month": "2026-08"
+      },
+      "expected": {
+        "clashes": false,
+        "incomingLoses": true
+      }
+    },
+    {
+      "id": "clash-a-table-with-no-natural-key",
+      "table": "tasks",
+      "incoming": {
+        "table": "tasks",
+        "uid": "11111111-1111-4111-8111-111111111111",
+        "updatedAt": "2026-08-15T09:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "name": "dailies",
+          "description": "",
+          "category": "game",
+          "reset_type": "daily",
+          "reset_time": "04:00",
+          "reset_day": null,
+          "is_priority": 0,
+          "is_urgent": 1,
+          "is_active": 1,
+          "completed_until": null
+        }
+      },
+      "existing": {
+        "id": 7,
+        "uid": "99999999-9999-4999-8999-999999999999",
+        "updated_at": "2026-08-15T09:00:00.000Z",
+        "deleted": 0,
+        "name": "dailies",
+        "reset_type": "daily",
+        "reset_time": "04:00",
+        "is_active": 1,
+        "completed_until": null
+      },
+      "expected": {
+        "clashes": false,
+        "incomingLoses": false
+      }
+    },
+    {
+      "id": "clash-two-null-slips-are-not-the-same-expense",
+      "table": "expenses",
+      "incoming": {
+        "table": "expenses",
+        "uid": "55555555-5555-4555-8555-555555555555",
+        "updatedAt": "2026-08-16T21:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "amount": 1200,
+          "category": "food",
+          "note": "",
+          "date": "2026-08-16",
+          "created_at": "2026-08-16 21:00:00",
+          "currency": "THB",
+          "slip_ref": null
+        }
+      },
+      "existing": {
+        "id": 9,
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updated_at": "2026-08-16T20:00:00.000Z",
+        "deleted": 0,
+        "amount": 60.5,
+        "category": "food",
+        "note": "",
+        "date": "2026-08-16",
+        "created_at": "2026-08-16 20:00:00",
+        "currency": "THB",
+        "slip_ref": null
+      },
+      "expected": {
+        "clashes": false,
+        "incomingLoses": true
+      }
+    },
+    {
+      "id": "clash-the-same-real-slip-still-clashes",
+      "table": "expenses",
+      "incoming": {
+        "table": "expenses",
+        "uid": "55555555-5555-4555-8555-555555555555",
+        "updatedAt": "2026-08-16T21:00:00.000Z",
+        "deleted": false,
+        "origin": "d-1122334455667788",
+        "fields": {
+          "amount": 1200,
+          "category": "food",
+          "note": "",
+          "date": "2026-08-16",
+          "created_at": "2026-08-16 21:00:00",
+          "currency": "THB",
+          "slip_ref": "slip-abc"
+        }
+      },
+      "existing": {
+        "id": 9,
+        "uid": "22222222-2222-4222-8222-222222222222",
+        "updated_at": "2026-08-16T20:00:00.000Z",
+        "deleted": 0,
+        "amount": 60.5,
+        "category": "food",
+        "note": "",
+        "date": "2026-08-16",
+        "created_at": "2026-08-16 20:00:00",
+        "currency": "THB",
+        "slip_ref": "slip-abc"
+      },
+      "expected": {
+        "clashes": true,
+        "incomingLoses": true
+      }
+    }
+  ],
+  "applyOrder": [
+    {
+      "id": "order-delete-before-create",
+      "records": [
+        {
+          "table": "budgets",
+          "uid": "bbbb",
+          "updatedAt": "2026-08-15T10:00:01.000Z",
+          "deleted": false,
+          "origin": "d-1122334455667788",
+          "fields": {
+            "category": "food",
+            "limit_amount": 5000,
+            "month": "2026-08"
+          }
+        },
+        {
+          "table": "budgets",
+          "uid": "aaaa",
+          "updatedAt": "2026-08-15T10:00:02.000Z",
+          "deleted": true,
+          "origin": "d-1122334455667788",
+          "fields": {
+            "category": "food",
+            "limit_amount": 5000,
+            "month": "2026-08"
+          }
+        }
+      ],
+      "expected": [
+        "aaaa",
+        "bbbb"
+      ]
+    },
+    {
+      "id": "order-is-stable-within-each-group",
+      "records": [
+        {
+          "table": "tasks",
+          "uid": "u1",
+          "updatedAt": "2026-08-15T09:00:00.000Z",
+          "deleted": false,
+          "origin": "d-1122334455667788",
+          "fields": {
+            "name": "dailies",
+            "description": "",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "reset_day": null,
+            "is_priority": 0,
+            "is_urgent": 1,
+            "is_active": 1,
+            "completed_until": null
+          }
+        },
+        {
+          "table": "tasks",
+          "uid": "u2",
+          "updatedAt": "2026-08-15T09:00:00.000Z",
+          "deleted": true,
+          "origin": "d-1122334455667788",
+          "fields": {
+            "name": "dailies",
+            "description": "",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "reset_day": null,
+            "is_priority": 0,
+            "is_urgent": 1,
+            "is_active": 1,
+            "completed_until": null
+          }
+        },
+        {
+          "table": "tasks",
+          "uid": "u3",
+          "updatedAt": "2026-08-15T09:00:00.000Z",
+          "deleted": false,
+          "origin": "d-1122334455667788",
+          "fields": {
+            "name": "dailies",
+            "description": "",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "reset_day": null,
+            "is_priority": 0,
+            "is_urgent": 1,
+            "is_active": 1,
+            "completed_until": null
+          }
+        },
+        {
+          "table": "tasks",
+          "uid": "u4",
+          "updatedAt": "2026-08-15T09:00:00.000Z",
+          "deleted": true,
+          "origin": "d-1122334455667788",
+          "fields": {
+            "name": "dailies",
+            "description": "",
+            "category": "game",
+            "reset_type": "daily",
+            "reset_time": "04:00",
+            "reset_day": null,
+            "is_priority": 0,
+            "is_urgent": 1,
+            "is_active": 1,
+            "completed_until": null
+          }
+        }
+      ],
+      "expected": [
+        "u2",
+        "u4",
+        "u1",
+        "u3"
+      ]
+    },
+    {
+      "id": "order-nothing-to-do",
+      "records": [],
+      "expected": []
+    }
+  ]
+}

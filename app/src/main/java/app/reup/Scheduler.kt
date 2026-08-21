@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import app.reup.core.horizon
 import kotlinx.datetime.Clock
@@ -27,6 +28,17 @@ import kotlinx.datetime.TimeZone
  * no stored state about what was scheduled, so there is no stored state to
  * drift out of sync with reality. It costs a few milliseconds and removes an
  * entire category of bug.
+ *
+ * THE LIST COMES FROM THE DATABASE NOW. That is the whole of this change, and
+ * it is why reschedule() suspends: reading rows is I/O, and a function that
+ * reads I/O cannot pretend otherwise for the convenience of its callers. The
+ * three callers each had to say how they wanted to wait, which is the point —
+ * an Activity has a scope, a receiver has goAsync, and neither should have been
+ * guessing.
+ *
+ * An empty database is a correct answer and produces no alarms. It is also the
+ * state this app is in until the first sync brings rows down, so the screen
+ * says which of the two it is rather than leaving silence to be interpreted.
  */
 object Scheduler {
 
@@ -52,10 +64,18 @@ object Scheduler {
      * that missing one or two links does not break it, and a reboot rebuilds it
      * regardless.
      */
-    fun reschedule(context: Context) {
+    suspend fun reschedule(context: Context) {
         val am = context.getSystemService(AlarmManager::class.java)
         val now = Clock.System.now()
         val zone = TimeZone.currentSystemDefault()
+
+        val repo = Repo.open(context)
+        val tasks = repo.tasks()
+        // Through Repo so that the queue and the window printed above it on the
+        // home screen are resolved by one function. Null is a real answer here
+        // — quiet hours turned off on the desktop — and Horizon already treats a
+        // null as none.
+        val quiet = Repo.quietHours(context)
 
         // Cancel first, always, and cancel every slot rather than the ones we
         // think are in use. A slot left over from a previous list is an alarm
@@ -68,11 +88,11 @@ object Scheduler {
         }
 
         val alarms = horizon(
-            tasks = Samples.tasks,
+            tasks = tasks,
             now = now,
             appZone = zone,
             limit = SLOTS,
-            quiet = Samples.quiet,
+            quiet = quiet,
         )
 
         alarms.forEachIndexed { slot, alarm ->
@@ -93,14 +113,18 @@ object Scheduler {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
 
-            am.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                alarm.fireAt.toEpochMilliseconds(),
-                pending,
-            )
+            wakeAt(am, alarm.fireAt.toEpochMilliseconds(), pending)
         }
 
-        Log.i(TAG, "scheduled ${alarms.size} alarms; next=${alarms.firstOrNull()?.fireAt}")
+        // The task count is in the line on purpose. "scheduled 0 alarms" has two
+        // causes that look identical in a log — no tasks, or tasks that all
+        // resolve to nothing schedulable — and this tells them apart without
+        // anyone having to reproduce it.
+        Log.i(
+            TAG,
+            "scheduled ${alarms.size} alarms from ${tasks.size} tasks; " +
+                    "next=${alarms.firstOrNull()?.fireAt}",
+        )
     }
 
     /**
@@ -111,6 +135,10 @@ object Scheduler {
      * asleep, and later whether Samsung's battery manager has quietly stopped
      * it. Waiting until 04:00 to learn that is a bad way to learn it.
      */
+    /** For the home screen, which has to say when reminders will be late. */
+    fun exactAllowed(context: Context): Boolean =
+        canBeExact(context.getSystemService(AlarmManager::class.java))
+
     fun fireTestIn(context: Context, seconds: Long) {
         val am = context.getSystemService(AlarmManager::class.java)
         val intent = Intent(context, AlarmReceiver::class.java)
@@ -123,11 +151,56 @@ object Scheduler {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        am.setAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            System.currentTimeMillis() + seconds * 1_000,
-            pending,
-        )
+        // The test button uses the same path as a real alarm on purpose: a test
+        // that takes a different route answers a question nobody asked.
+        wakeAt(am, System.currentTimeMillis() + seconds * 1_000, pending)
+    }
+
+    /**
+     * Whether this build may wake the phone at the minute it was told.
+     *
+     * WHY IT IS ASKED EVERY TIME AND NOT CACHED
+     *
+     * The person can take it away in system settings while the app is not
+     * running, and Android kills the process when they do. Caching would only
+     * ever be right until the moment it mattered.
+     */
+    private fun canBeExact(am: AlarmManager): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
+
+    /**
+     * On the minute when allowed, batched when not.
+     *
+     * WHY THIS IS NOW THE DEFAULT FOR EVERYTHING
+     *
+     * It used to be batched for every task, to save battery on a phone with a
+     * worn one. That was decided while the task list was four hardcoded lines
+     * and nothing real could be missed by it, so the saving had no visible
+     * price. The price turned out to be a reminder arriving twenty-five minutes
+     * late, and this list has medication in it beside the game dailies.
+     *
+     * The obvious repair — a per-task "must be on time" tick — was worse. It
+     * asks a person to predict, months ahead, how much they will care about the
+     * timing of a task they are typing in right now, which is the same shape as
+     * every other field this project has had to move or delete: the answer it
+     * collects is the one given while concentrating, not the true one.
+     *
+     * And the arithmetic never favoured batching much. There are eight alarms.
+     * Waking, reading SQLite and posting a notification is a fraction of a
+     * second of CPU. What actually costs power on this path is the sync that
+     * now runs inside the alarm — a radio held open for seconds, not a timer
+     * fired on the minute. If battery ever has to be bought back, that is the
+     * lever, and cutting eight alarms to fewer is the next one. Being twenty
+     * minutes late for medication was never a sensible way to pay for it.
+     */
+    private fun wakeAt(am: AlarmManager, atMillis: Long, pending: PendingIntent) {
+        if (canBeExact(am)) {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pending)
+        } else {
+            // Not an error and not worth interrupting anyone over. The home
+            // screen says so, once, with a way to fix it.
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pending)
+        }
     }
 
     /** The PendingIntent for a slot if one is registered, or null. */

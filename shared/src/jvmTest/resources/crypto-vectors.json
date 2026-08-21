@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "generatedBy": "gen-crypto-vectors.ts",
+  "note": "Fake key. Encrypts nothing real. Safe to commit.",
+  "keyB64": "AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw",
+  "otherKeyB64": "BRAbJjE8R1JdaHN-iZSfqrXAy9bh7PcCDRgjLjlET1o",
+  "samplePairing": "reup://pair?b=vector-bucket-0001&k=AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw",
+  "positive": [
+    {
+      "id": "seal-empty-phone-1",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 1,
+      "plaintextUtf8": "",
+      "blobB64": "UkVVUAEAAQIDBAUGBwgJCguG6oQgdK-uu6HnnXrTFlhp"
+    },
+    {
+      "id": "seal-empty-laptop-4096",
+      "bucketId": "vector-bucket-0001",
+      "device": "laptop",
+      "seq": 4096,
+      "plaintextUtf8": "",
+      "blobB64": "UkVVUAEfICEiIyQlJicoKSpMqU32AWAQ0GFzWMgeQn5x"
+    },
+    {
+      "id": "seal-ascii-phone-1",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 1,
+      "plaintextUtf8": "{\"version\":1,\"changes\":[]}",
+      "blobB64": "UkVVUAE-P0BBQkNERUZHSEnGF4WfDzSDcC9QPBrgGjQq_32la86sRHxQMQeSTyI2KCiKuFfBVwXVwS4"
+    },
+    {
+      "id": "seal-ascii-laptop-4096",
+      "bucketId": "vector-bucket-0001",
+      "device": "laptop",
+      "seq": 4096,
+      "plaintextUtf8": "{\"version\":1,\"changes\":[]}",
+      "blobB64": "UkVVUAFdXl9gYWJjZGVmZ2gb3xKYh4uDg9f47yQXtI27AqkRfwUGxPoroPPStIXsbphxY8PYBMWI-B4"
+    },
+    {
+      "id": "seal-thai-phone-1",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 1,
+      "plaintextUtf8": "{\"name\":\"ยาความดัน\",\"note\":\"เช้า 09:00\"}",
+      "blobB64": "UkVVUAF8fX5_gIGCg4SFhoczbSqOaBgh_-dqc47cnAL9ZC4WqhmpE4rA9bWsIKDJK0fEIwCEdTzuUKLxEzp4YkZfcbE8rWELLedR2SnkE2RzdVHbbKhzWsq9Z0DsMkwNeJd2"
+    },
+    {
+      "id": "seal-thai-laptop-4096",
+      "bucketId": "vector-bucket-0001",
+      "device": "laptop",
+      "seq": 4096,
+      "plaintextUtf8": "{\"name\":\"ยาความดัน\",\"note\":\"เช้า 09:00\"}",
+      "blobB64": "UkVVUAGbnJ2en6ChoqOkpaZikyjxV23VIhd1ZEcjz5m-27NdmjInLVdAix9xd29iNdfSuJGvu4qi8yWb9iuhaHJImS7EEgMyoNZvulpcbeEabjFAOdQgr8_tTAzqAGNLctAk"
+    },
+    {
+      "id": "seal-emoji-phone-1",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 1,
+      "plaintextUtf8": "{\"emoji\":\"🎯\",\"goal\":\"เก็บเงิน\"}",
+      "blobB64": "UkVVUAG6u7y9vr_AwcLDxMV2Jg-46WHBn4mfe-YHWbUhjEK0kECk23_QWeYPco4co_wSvZbGSJLBUsBghcdCQs27wipD-tW35R-3dsm8tldYN6Q"
+    },
+    {
+      "id": "seal-emoji-laptop-4096",
+      "bucketId": "vector-bucket-0001",
+      "device": "laptop",
+      "seq": 4096,
+      "plaintextUtf8": "{\"emoji\":\"🎯\",\"goal\":\"เก็บเงิน\"}",
+      "blobB64": "UkVVUAHZ2tvc3d7f4OHi4-TAdYA2mEA8S9rnuyQEKMUkmHCTilJNgomsf8Z8MjYi-WBxqbshmEkDSQ_ox6_c4-kftaR4EKPjSqD_3K2-g7QhyeQ"
+    },
+    {
+      "id": "seal-long-phone-1",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 1,
+      "plaintextUtf8": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxปิดท้าย",
+      "blobB64": "UkVVUAH4-fr7_P3-_wABAgM0cBOSM0jODS_LYFaYx2U5hBLLlBdo0T8VpRsOI2kIpZOGq3Zeny2yPocu5mFk6gK3f2rMktX_2jnLGWVBXmxK7vuGN9ZFKbhrsEm3Hx3iCUCJUybMIu-f3sNo-myXz7nzl0bdK4CAzmiWWilJ6MFb9oNii3VZeoF7_-1tm0_vsI5Q2Lmb5WbwhfGYsSlHigHwG6asJOCK4HnxIArFIioRNh8yFRKM9Qwayp7Zi_ehawSRKcLkHkKLmDcw8Kn27x9Sd6XSPbnG2w3t1AZazt5_sil1lU_rUr4nhvufKS_kbuLIG5r_NERRUFr2o7_hrc6ykV-8iyiRjEOATrqKtbfX7fBKQ4K79OZs5z5XxeSf-gSmroO1q398VGmtWktQgsLTMxoHb6V5Q_yiPLu2Y0M1S0NYlrN-6oVOdVqqfu7hrEuBgW_ucJCfDgC-NmhgrG_zzpOs-bctrBJLQiLf4AwkStxRC-2WtrScaCQhig7X9q1HulolSQozG-6BHpnF68MN9pnzijo7NeVpg3k69kaHPpAF4MEcfXAHEhh4mj50jnMukMoaI3SYnNpgR9NG6o8rE_nDyijcbgniFcz_Xc6l-inwxlGw09Vo_7-i_-w5DuazMOBKvv76qQFFUgGegBTrVqru_Hj53iK-XKOaM1mgLEUhrZDiSkh5Pty3reZpU0VQesGO4oGRsYkgUITGzEsCdYqyBpuWC9FSpOKCoH7HtwPhEu9m1Czqp38HBErQ9bu3BC45dLGPO_kgdbNX07frIU7fciYFWozlawhZVdmIPvEJiL5R7RPGuKWH93E3E2_CK5Rx6f4-1AOskQ55qgXhA_B7cgpA7qaNme_OrOFHDL8mWC4Wipjge70-BZu4HqAbQxaG-w24eteEn4DEwqKuw9OIIJ6OCrHY61MXihUNP77ofZDUjCuKhQZPuYGBdYp2cYzSUmeibRatzEB_R-8oYTzXHFV6FLwAr2-waiq2Q6jIng_Ilqo9k58sJyZX8iQ38RnntuQER5rrVzFQ5GxSQCekPOEa6b3V9G0RwgYvSDtdwH3w8y74ZMwgnpRd8wWnzIUs-sqXLVJsVz5oZyyDhwMrzHHEfUDTn-I7c00-QQlzNWc-krJMkeczSi1Um2v_rtht0PQ8Ax3tEpVIkAUBnBpcVN30WgMlaoXMbTs5pFbsUbwSg0xfcL91jPZZlckiQ1hoGO3xsLG0aFRq7mNplZkGWjU2o-RNcK0Nji7q6UwY2KF4I56lU7uhKnRt-ob0Dh5jxeW-ePrMNm4zKAMXezlt-cdcFSyGxjmDKCFYaserpS0HhXqjJU8ZB0beJp4aTgTOHfiEoh0X9fXksd2MBxHpuX1U3I_36iHycBDlWlpkpVUvuuWxBbWztA"
+    },
+    {
+      "id": "seal-long-laptop-4096",
+      "bucketId": "vector-bucket-0001",
+      "device": "laptop",
+      "seq": 4096,
+      "plaintextUtf8": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxปิดท้าย",
+      "blobB64": "UkVVUAEXGBkaGxwdHh8gISJqfM1og6gtH8wKb8wzov4kARZtFjyxGxDnpX9uCg5vsjcuYTHCbyWqV81xdJ1FMJ88u85a1Hsx8GMMGUQBni4L840wdHTaX9rsVxVIbdny71kCOb6jYhwEFtEhQSAo9_6yWGcEkb5GqmA4EaEozji3LwECELLG0HlKGQj4oqKJ9tDE9mb02o99RJiTzGZcSa2JdCvo63qSAfksx_2DefgtzhDAF96Gu_f3vfChHA3OSOjC00qjAoivgKUV4uLslLoSkc4HhpfXuSAvLVCA_Fy2OKcK8GCfefBmsoZoA9lWkAhAI928vwTE7OG2ijPirYf5KQjm-cLcQynCRu5Gp2HffuC29BsBreBnrcT7WFj-jrKsdWMtFJyPF7EtDSSR8_IyfVb4kFeLR_B4_qeK_NJhMF8m0dFMF-KTnj6sxSvBP2VOOcK1HEkoo10edjt5GGHIm1QDfWo8FMXF78Kfjy0CTU8Ta7XwdnbPEXESfbhE1HEgKyQwNsFAoVIcpe1MlNDulCd2Zoe6ITK6uGYIcrsgCgNESAazV9ga5BM2tk8SyCwkQC0Bc_vyovU1QTYx1kSdm73jTgqUMqqlgJFIPvx6OuLCLFTt42Hr1aElpHMCLum64GJ0asBc8k3GfekI6koAwX6wjUeSIGvV_jvBiO4b--r4UBsgoogsyKI2VCxGf8e09eeKNj490vEDpzguPfcfuJ8q-VXmKZOhTkktX7wMLdF_wLN-_ajicMxRQv2RLg1Yuo7DM2FwckiK0Wlp8qVwtZWhkELiuD9QuIAEH_H78JMFo-WsCQ9MKsn7F-5tPo5w6VLsBR--Zc9XEJztYbZkrGNKXV2aPmjHJbbgXeWn5zloPVTZfldX26RH6pnV1myd9Gux_3PZicVAgXps-NMgD_PvrUMdqB_9jZDJ-Tb3rlzLngHs1inVwZL-Y2seBIlLPHTViwpz5SyL-_pYj3nkUFB4nAT0dqDkV43syghJBjtbWTRzTbkEF6LH4e6DPwrEzSlR-Q32p75RKAejDgk-GbXhg_zuqYUTflr2qDWhVGZt7G-c-3PvhBnV0_R6Sdsx8ahusQhjeobHNismtWfDwS5qSKc-49au8WGp_5zE0IVTi17caaYfV6aB6MdU53LQGaYHyR5BVSZGF2GrxgTsRUq7qQ4Sn0jxve6UBMWUn35D5X8PMb-t38rKsTZ9BBRY1y53ut2k3-8CEOG3Ea6UacggDW8ZGtHTw0P1GBpKEgVVbv31TGbrc-KB6NzhAQE4BKSXPKdZoN2eEWDttSkCcUNPJfcigqgBe4ziAsMv_fmCTI3aeol3BrXTQBDPtPqVBulCHbRn81k9eXAMXM7K7wZISrWWXdhJgXNxvB8QE11rO95oqTOgPlYZpw"
+    }
+  ],
+  "negative": [
+    {
+      "id": "moved-to-another-seq",
+      "why": "the AAD binds a blob to its filename; renaming it must not verify",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 8,
+      "blobB64": "UkVVUAH5-vv8_f7_AAECAwSB1tRORhhlqYHvvud41KUiP93ysfKm",
+      "expect": "auth"
+    },
+    {
+      "id": "moved-to-another-device",
+      "why": "same binding, other half of the filename",
+      "bucketId": "vector-bucket-0001",
+      "device": "laptop",
+      "seq": 7,
+      "blobB64": "UkVVUAH5-vv8_f7_AAECAwSB1tRORhhlqYHvvud41KUiP93ysfKm",
+      "expect": "auth"
+    },
+    {
+      "id": "another-bucket",
+      "why": "a blob from someone else's folder must not open in this one",
+      "bucketId": "some-other-bucket",
+      "device": "phone",
+      "seq": 7,
+      "blobB64": "UkVVUAH5-vv8_f7_AAECAwSB1tRORhhlqYHvvud41KUiP93ysfKm",
+      "expect": "auth"
+    },
+    {
+      "id": "one-flipped-bit",
+      "why": "the tag exists to catch exactly this",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 7,
+      "blobB64": "UkVVUAH5-vv8_f7_AAECAwSB1tRORhhlqYHvvud41KUiP93ysfKn",
+      "expect": "auth"
+    },
+    {
+      "id": "truncated",
+      "why": "a half-uploaded file must not half-decrypt",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 7,
+      "blobB64": "UkVVUAH5-vv8_f7_AAECAwSB1tRORhhlqYHvvud41KUiP93ysfI",
+      "expect": "auth"
+    },
+    {
+      "id": "future-version",
+      "why": "refuse rather than guess; a hopeful decrypt writes nonsense to disk",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 7,
+      "blobB64": "UkVVUAL5-vv8_f7_AAECAwSB1tRORhhlqYHvvud41KUiP93ysfKm",
+      "expect": "version"
+    },
+    {
+      "id": "not-a-reup-blob",
+      "why": "someone else's file in the same folder is not an error, but it is not ours",
+      "bucketId": "vector-bucket-0001",
+      "device": "phone",
+      "seq": 7,
+      "blobB64": "WEVVUAH5-vv8_f7_AAECAwSB1tRORhhlqYHvvud41KUiP93ysfKm",
+      "expect": "format"
+    }
+  ]
+}

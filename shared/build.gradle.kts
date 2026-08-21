@@ -89,6 +89,7 @@ kotlin {
             // its own classpath. Hiding a type that is part of the public API
             // means every consumer has to redeclare the same dependency.
             api(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
