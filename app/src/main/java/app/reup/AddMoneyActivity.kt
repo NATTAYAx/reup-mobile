@@ -93,6 +93,7 @@ class AddMoneyActivity : Activity() {
     private lateinit var outButton: Button
     private lateinit var inButton: Button
     private lateinit var saveButton: Button
+    private lateinit var cancelButton: Button
     private lateinit var status: TextView
     private lateinit var monthLine: TextView
     private lateinit var recentLabel: TextView
@@ -102,6 +103,8 @@ class AddMoneyActivity : Activity() {
     private val chips = mutableListOf<Button>()
     private var categories: List<Category> = emptyList()
     private var recent: List<MoneyEntry> = emptyList()
+    /** The row being rewritten, or null when this is a new one. */
+    private var editing: MoneyEntry? = null
     private var category = "other"
     private var currency = CURRENCY_FALLBACK
     private var currencyKnown = false
@@ -144,6 +147,10 @@ class AddMoneyActivity : Activity() {
         saveButton = Button(this)
         saveButton.setOnClickListener { save() }
 
+        cancelButton = Button(this)
+        cancelButton.text = CANCEL_EDIT
+        cancelButton.setOnClickListener { cancelEdit() }
+
         monthLine = note("")
         recentLabel = label(RECENT_TITLE)
         recentHint = note(RECENT_HINT)
@@ -173,6 +180,7 @@ class AddMoneyActivity : Activity() {
         column.addView(label("วันที่"), rowParams())
         column.addView(dateBox, rowParams())
         column.addView(saveButton, rowParams())
+        column.addView(cancelButton, rowParams())
         column.addView(status, rowParams())
         column.addView(recentLabel, rowParams())
         column.addView(recentHint, rowParams())
@@ -322,7 +330,7 @@ class AddMoneyActivity : Activity() {
             // sitting next to twenty amounts is twenty chances to remove the
             // wrong one with a thumb, and removing a row is not the thing this
             // screen is for.
-            row.setOnLongClickListener { confirmDelete(e); true }
+            row.setOnLongClickListener { rowMenu(e); true }
 
             val p = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -365,6 +373,76 @@ class AddMoneyActivity : Activity() {
      * at on a bigger screen, and building an undo here would be a second way of
      * putting a row back that only one of the two machines knows about.
      */
+    /**
+     * Two things can be done to a row, and neither is what this screen is for.
+     *
+     * Behind a long press rather than on the row, because buttons sitting next
+     * to twenty amounts are twenty chances to hit the wrong one with a thumb.
+     */
+    private fun rowMenu(e: MoneyEntry) {
+        if (busy || blocked) return
+        AlertDialog.Builder(this)
+            .setTitle(nameOf(e))
+            .setItems(arrayOf(MENU_EDIT, MENU_DELETE)) { _, which ->
+                if (which == 0) startEdit(e) else confirmDelete(e)
+            }
+            .show()
+    }
+
+    /**
+     * Puts a row back into the form.
+     *
+     * Everything the form needs is already in hand: the list carries the amount,
+     * the unit, the date, the note and either the category or the name on the
+     * payment. Reading the row again would be a second answer to what the row
+     * says, and the one on screen is the one that was pressed.
+     *
+     * The unit comes from the row rather than from the setting, because the row
+     * is what is being rewritten. Editing a dollar row on a phone counting in
+     * baht should not quietly refile it.
+     */
+    private fun startEdit(e: MoneyEntry) {
+        editing = e
+        incoming = e.incoming
+        currency = e.currency
+        currencyKnown = true
+        amountBox.setText(trimZero(e.amount))
+        noteBox.setText(e.note ?: "")
+        dateBox.setText(e.date)
+        if (e.incoming) sourceBox.setText(e.tag ?: "")
+        else category = if (categories.any { it.key == e.tag }) e.tag!! else category
+        status.text = EDITING
+        render()
+        amountBox.requestFocus()
+    }
+
+    /** Back to writing a new row, leaving the old one exactly as it was. */
+    private fun cancelEdit() {
+        editing = null
+        amountBox.setText("")
+        noteBox.setText("")
+        sourceBox.setText("")
+        dateBox.setText(LocalDate.now().toString())
+        status.text = ""
+        scope.launch {
+            try {
+                val repo = Repo.money(this@AddMoneyActivity)
+                val stored = repo.currency()
+                currencyKnown = stored != null
+                currency = stored ?: CURRENCY_FALLBACK
+            } catch (_: Exception) {
+                // The unit on screen is one the row itself carried, so leaving
+                // it is no worse than guessing, and this is not the moment to
+                // put an error in front of somebody who pressed cancel.
+            }
+            render()
+        }
+    }
+
+    /** `60.0` as `60`, because that is what was typed in. */
+    private fun trimZero(v: Double): String =
+        if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+
     private fun confirmDelete(e: MoneyEntry) {
         if (busy || blocked) return
         val sign = if (e.incoming) "+" else "-"
@@ -440,7 +518,21 @@ class AddMoneyActivity : Activity() {
      * nothing happened.
      */
     private fun render() {
-        title = if (incoming) "บันทึกรายรับ" else "บันทึกรายจ่าย"
+        val edit = editing != null
+        title = when {
+            edit && incoming -> "\u0e41\u0e01\u0e49\u0e23\u0e32\u0e22\u0e23\u0e31\u0e1a"
+            edit -> "\u0e41\u0e01\u0e49\u0e23\u0e32\u0e22\u0e08\u0e48\u0e32\u0e22"
+            incoming -> "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e23\u0e32\u0e22\u0e23\u0e31\u0e1a"
+            else -> "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e23\u0e32\u0e22\u0e08\u0e48\u0e32\u0e22"
+        }
+
+        // The direction cannot be flipped mid-edit. A row lives in one table or
+        // the other, and moving it between them is a delete and a new row, not
+        // an edit — doing it silently would leave the old one behind.
+        outButton.isEnabled = !edit
+        inButton.isEnabled = !edit
+        cancelButton.visibility =
+            if (edit) android.view.View.VISIBLE else android.view.View.GONE
 
         outButton.alpha = if (incoming) 0.55f else 1f
         inButton.alpha = if (incoming) 1f else 0.55f
@@ -466,7 +558,11 @@ class AddMoneyActivity : Activity() {
         }
 
         saveButton.isEnabled = !busy && !blocked
-        saveButton.text = if (busy) "กำลังบันทึก" else "บันทึก"
+        saveButton.text = when {
+            busy -> "กำลังบันทึก"
+            edit -> "บันทึกการแก้"
+            else -> "บันทึก"
+        }
     }
 
     private fun amount() = amountBox.text.toString().trim()
@@ -509,8 +605,13 @@ class AddMoneyActivity : Activity() {
         scope.launch {
             try {
                 val repo = Repo.money(this@AddMoneyActivity)
-                val refused =
-                    if (incoming) repo.addIncome(income()) else repo.addExpense(expense(), known)
+                val target = editing
+                val refused = when {
+                    target != null && incoming -> repo.editIncome(target.uid, income())
+                    target != null -> repo.editExpense(target.uid, expense(), known)
+                    incoming -> repo.addIncome(income())
+                    else -> repo.addExpense(expense(), known)
+                }
                 if (refused.isNotEmpty()) {
                     status.text = refused.joinToString("\n") { sentence(it) }
                     return@launch
@@ -529,11 +630,13 @@ class AddMoneyActivity : Activity() {
                 // produced by pressing the same button twice. The direction, the
                 // category and the date are kept, because the next thing written
                 // down at a counter is usually the same kind of thing.
+                val wasEdit = editing != null
+                editing = null
                 amountBox.setText("")
                 noteBox.setText("")
                 if (incoming) sourceBox.setText("")
                 amountBox.requestFocus()
-                status.text = SAVED
+                status.text = if (wasEdit) EDITED else SAVED
                 refresh(repo)
             } catch (e: Exception) {
                 status.text = "บันทึกไม่ได้ ${e.message ?: e.toString()}"
@@ -611,11 +714,21 @@ class AddMoneyActivity : Activity() {
         private const val RECENT_TITLE = "ล่าสุด"
 
         /** Nothing on a row says it can be pressed, so the heading says it. */
-        private const val RECENT_HINT = "กดค้างที่รายการเพื่อลบ"
+        private const val RECENT_HINT = "กดค้างที่รายการเพื่อแก้หรือลบ"
 
         private const val SAVED = "บันทึกแล้ว"
 
         private const val DELETED = "ลบแล้ว"
+
+        private const val EDITED = "แก้แล้ว"
+
+        private const val EDITING = "กำลังแก้รายการนี้"
+
+        private const val CANCEL_EDIT = "ยกเลิกแก้"
+
+        private const val MENU_EDIT = "แก้ไข"
+
+        private const val MENU_DELETE = "ลบ"
 
         private const val DELETE_TITLE = "ลบรายการนี้"
 

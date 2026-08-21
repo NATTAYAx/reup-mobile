@@ -307,6 +307,73 @@ const val SQL_DELETE_INCOME: String =
     "UPDATE income SET deleted = 1, source = '', note = '', amount = 0 " +
             "WHERE uid = ? AND deleted = 0"
 
+// ─── editing one ─────────────────────────────────────────────────────────────
+//
+// Mirror of moneyUpdate in moneyDraft.ts, and it walks the allowlist rather
+// than the caller's map for the reason that matters here: the statement built
+// from it is compared against the desktop's byte for byte in the vectors, and
+// two devices building the same edit in a different order build two different
+// strings.
+//
+// A field the allowlist does not name is dropped rather than refused, because
+// what is on the other end is a form. A field it names but the caller left out
+// is not touched, which is what makes a two-field edit possible.
+//
+// No slip_ref. Pointing an existing row at a different receipt is not an edit of
+// the row, it is a different claim about where it came from.
+
+/** Which columns an expense edit may touch, in order, and how each is coerced. */
+val EXPENSE_EDITABLE: List<Pair<String, String>> = listOf(
+    "amount" to "amount",
+    "currency" to "text",
+    "category" to "text",
+    "note" to "text",
+    "date" to "text",
+)
+
+/** The same for a payment. `source` sits where `category` does. */
+val INCOME_EDITABLE: List<Pair<String, String>> = listOf(
+    "amount" to "amount",
+    "currency" to "text",
+    "source" to "text",
+    "note" to "text",
+    "date" to "text",
+)
+
+private fun coerceMoney(how: String, v: Any?): SyncValue =
+    if (how == "amount") SyncValue.Num(amountOf(v as? String ?: v?.toString()) ?: 0.0)
+    else SyncValue.Text(v as? String ?: "")
+
+/** The columns and values of an edit, in allowlist order. */
+fun moneyUpdate(table: String, fields: Map<String, Any?>): Pair<List<String>, List<SyncValue>> {
+    val allow = if (table == "income") INCOME_EDITABLE else EXPENSE_EDITABLE
+    val columns = mutableListOf<String>()
+    val values = mutableListOf<SyncValue>()
+    for ((column, how) in allow) {
+        if (!fields.containsKey(column)) continue
+        columns += column
+        values += coerceMoney(how, fields[column])
+    }
+    return columns to values
+}
+
+/**
+ * The statement for those columns. The uid is bound last, after the values.
+ *
+ * `AND deleted = 0` for the same reason the tombstones have it: editing a row
+ * that is already gone should write nothing rather than quietly put a version of
+ * it back on the other device with the payload restored.
+ *
+ * An empty column list gives an empty string, which is not a statement and is
+ * meant to be checked for. `UPDATE expenses SET WHERE uid = ?` is a syntax error
+ * that would surface at the driver rather than here.
+ */
+fun moneyUpdateSql(table: String, columns: List<String>): String {
+    if (columns.isEmpty()) return ""
+    return "UPDATE " + table + " SET " + columns.joinToString(", ") { "$it = ?" } +
+            " WHERE uid = ? AND deleted = 0"
+}
+
 /**
  * Spending, from the phone.
  *
@@ -395,6 +462,59 @@ class MoneyRepo(private val db: Db) {
             if (entry.incoming) SQL_DELETE_INCOME else SQL_DELETE_EXPENSE,
             listOf(SyncValue.Text(entry.uid)),
         )
+    }
+
+    /**
+     * Rewrites a row that is already there, in whichever table it came from.
+     *
+     * Validated with the same functions a new row is, because an edit that can
+     * put a row into a state a new row could not reach is a second definition of
+     * what a valid row is. The draft carries every editable field, so this is a
+     * full rewrite rather than a patch — the screen it comes from has all five
+     * boxes filled in and there is nothing partial to express.
+     *
+     * The triggers stamp `updated_at`, so nothing here reads a clock.
+     */
+    suspend fun editExpense(uid: String, draft: ExpenseDraft, known: List<String>): List<String> {
+        val problems = expenseProblems(draft, known)
+        if (problems.isNotEmpty()) return problems
+        write(
+            "expenses",
+            uid,
+            mapOf(
+                "amount" to draft.amount,
+                "currency" to draft.currency,
+                "category" to resolveCategory(draft.category, known),
+                "note" to draft.note,
+                "date" to draft.date,
+            ),
+        )
+        return emptyList()
+    }
+
+    /** Money in. Same shape as [editExpense], different table. */
+    suspend fun editIncome(uid: String, draft: IncomeDraft): List<String> {
+        val problems = incomeProblems(draft)
+        if (problems.isNotEmpty()) return problems
+        write(
+            "income",
+            uid,
+            mapOf(
+                "amount" to draft.amount,
+                "currency" to draft.currency,
+                "source" to draft.source,
+                "note" to draft.note,
+                "date" to draft.date,
+            ),
+        )
+        return emptyList()
+    }
+
+    private suspend fun write(table: String, uid: String, fields: Map<String, Any?>) {
+        val (columns, values) = moneyUpdate(table, fields)
+        val sql = moneyUpdateSql(table, columns)
+        if (sql.isEmpty()) return
+        db.execute(sql, values + SyncValue.Text(uid))
     }
 
     suspend fun categories(): List<Category> =

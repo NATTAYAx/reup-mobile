@@ -2155,7 +2155,162 @@
     "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE deleted = 0 AND currency = ? AND strftime('%Y-%m', date) = ?",
     "SELECT COALESCE(SUM(amount), 0) as total FROM income WHERE deleted = 0 AND currency = ? AND strftime('%Y-%m', date) = ?",
     "SELECT COUNT(*) as n FROM (SELECT currency FROM expenses WHERE deleted = 0 AND currency != ? AND strftime('%Y-%m', date) = ? UNION ALL SELECT currency FROM income WHERE deleted = 0 AND currency != ? AND strftime('%Y-%m', date) = ?)",
-    "SELECT kind, uid, date, amount, currency, tag, note FROM (SELECT 'out' as kind, uid, date, amount, currency, created_at, category as tag, note FROM expenses WHERE deleted = 0 UNION ALL SELECT 'in' as kind, uid, date, amount, currency, created_at, source as tag, note FROM income WHERE deleted = 0) ORDER BY date DESC, created_at DESC, uid DESC LIMIT 20"
+    "SELECT kind, uid, date, amount, currency, tag, note FROM (SELECT 'out' as kind, uid, date, amount, currency, created_at, category as tag, note FROM expenses WHERE deleted = 0 UNION ALL SELECT 'in' as kind, uid, date, amount, currency, created_at, source as tag, note FROM income WHERE deleted = 0) ORDER BY date DESC, created_at DESC, uid DESC LIMIT 20",
+    "UPDATE expenses SET deleted = 1, note = '', amount = 0, slip_ref = NULL WHERE uid = ? AND deleted = 0",
+    "UPDATE income SET deleted = 1, source = '', note = '', amount = 0 WHERE uid = ? AND deleted = 0"
+  ],
+  "moneyUpdate": [
+    {
+      "table": "expenses",
+      "fields": {
+        "amount": "60"
+      },
+      "columns": [
+        "amount"
+      ],
+      "values": [
+        60
+      ],
+      "sql": "UPDATE expenses SET amount = ? WHERE uid = ? AND deleted = 0"
+    },
+    {
+      "table": "expenses",
+      "fields": {
+        "note": "  กาแฟ  ",
+        "amount": 60
+      },
+      "columns": [
+        "amount",
+        "note"
+      ],
+      "values": [
+        60,
+        "  กาแฟ  "
+      ],
+      "sql": "UPDATE expenses SET amount = ?, note = ? WHERE uid = ? AND deleted = 0"
+    },
+    {
+      "table": "expenses",
+      "fields": {
+        "date": "2026-08-19",
+        "category": "food",
+        "currency": "THB",
+        "note": "",
+        "amount": "12.5"
+      },
+      "columns": [
+        "amount",
+        "currency",
+        "category",
+        "note",
+        "date"
+      ],
+      "values": [
+        12.5,
+        "THB",
+        "food",
+        "",
+        "2026-08-19"
+      ],
+      "sql": "UPDATE expenses SET amount = ?, currency = ?, category = ?, note = ?, date = ? WHERE uid = ? AND deleted = 0"
+    },
+    {
+      "table": "expenses",
+      "fields": {
+        "note": "x",
+        "date": "2026-08-01",
+        "amount": "1"
+      },
+      "columns": [
+        "amount",
+        "note",
+        "date"
+      ],
+      "values": [
+        1,
+        "x",
+        "2026-08-01"
+      ],
+      "sql": "UPDATE expenses SET amount = ?, note = ?, date = ? WHERE uid = ? AND deleted = 0"
+    },
+    {
+      "table": "expenses",
+      "fields": {
+        "amount": "5",
+        "slip_ref": "abc",
+        "id": 3,
+        "uid": "u",
+        "deleted": 1
+      },
+      "columns": [
+        "amount"
+      ],
+      "values": [
+        5
+      ],
+      "sql": "UPDATE expenses SET amount = ? WHERE uid = ? AND deleted = 0"
+    },
+    {
+      "table": "expenses",
+      "fields": {},
+      "columns": [],
+      "values": [],
+      "sql": ""
+    },
+    {
+      "table": "income",
+      "fields": {
+        "amount": "6516",
+        "source": "TELUS"
+      },
+      "columns": [
+        "amount",
+        "source"
+      ],
+      "values": [
+        6516,
+        "TELUS"
+      ],
+      "sql": "UPDATE income SET amount = ?, source = ? WHERE uid = ? AND deleted = 0"
+    },
+    {
+      "table": "income",
+      "fields": {
+        "source": "",
+        "note": "",
+        "currency": "USD",
+        "date": "2026-08-19",
+        "amount": 0
+      },
+      "columns": [
+        "amount",
+        "currency",
+        "source",
+        "note",
+        "date"
+      ],
+      "values": [
+        0,
+        "USD",
+        "",
+        "",
+        "2026-08-19"
+      ],
+      "sql": "UPDATE income SET amount = ?, currency = ?, source = ?, note = ?, date = ? WHERE uid = ? AND deleted = 0"
+    },
+    {
+      "table": "income",
+      "fields": {
+        "amount": "abc"
+      },
+      "columns": [
+        "amount"
+      ],
+      "values": [
+        0
+      ],
+      "sql": "UPDATE income SET amount = ? WHERE uid = ? AND deleted = 0"
+    }
   ],
   "moneyFallbacks": [
     "THB",

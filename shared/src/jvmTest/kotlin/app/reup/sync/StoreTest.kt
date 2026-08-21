@@ -535,6 +535,71 @@ class StoreTest {
     }
 
     @Test
+    fun `builds the same edit as the desktop, column for column`() {
+        // The desktop runs these against a real database in check-sync. The
+        // statement is built rather than written, so the thing that has to match
+        // is the builder: two devices assembling the same edit in a different
+        // order assemble two different strings, and neither one is wrong on its
+        // own screen.
+        var n = 0
+        for (c in cases("moneyUpdate")) {
+            val o = c.jsonObject
+            val table = o["table"]!!.jsonPrimitive.content
+            val fields = mutableMapOf<String, Any?>()
+            for ((k, v) in o["fields"]!!.jsonObject) {
+                val p = v.jsonPrimitive
+                fields[k] = if (p.isString) p.content else p.content
+            }
+            val (columns, values) = moneyUpdate(table, fields)
+            assertEquals(
+                o["columns"]!!.jsonArray.map { it.jsonPrimitive.content },
+                columns,
+                "columns for $fields",
+            )
+            assertEquals(o["sql"]!!.jsonPrimitive.content, moneyUpdateSql(table, columns), "sql for $fields")
+            assertEquals(o["values"]!!.jsonArray.size, values.size, "value count for $fields")
+            n++
+        }
+        println("$n moneyUpdate vectors")
+        assertTrue(n > 0, "no moneyUpdate vectors ran")
+    }
+
+    @Test
+    fun `an edit is refused by the same rules a new row is`() {
+        // An edit that can put a row into a state a new row could not reach is a
+        // second definition of what a valid row is, and only one of the two would
+        // ever be looked at again.
+        val db = RecordingDb()
+        val known = listOf("food", "other")
+        var refused: List<String> = emptyList()
+        drive {
+            refused = MoneyRepo(db).editExpense(
+                "u-1",
+                ExpenseDraft(amount = "0", currency = "THB", category = "food", note = "", date = "2026-08-19"),
+                known,
+            )
+        }
+        assertEquals(listOf("amount-not-positive"), refused)
+        assertEquals(0, db.executed.size, "a refused edit writes nothing")
+
+        drive {
+            MoneyRepo(db).editExpense(
+                "u-1",
+                ExpenseDraft(amount = "45", currency = "THB", category = "gone", note = "x", date = "2026-08-19"),
+                known,
+            )
+        }
+        val wrote = db.executed[0]
+        assertEquals(SyncValue.Text("u-1"), wrote.params.last(), "the uid is bound last")
+        assertEquals(6, wrote.params.size)
+        assertEquals(
+            SyncValue.Text("other"),
+            wrote.params[2],
+            "an unknown category is filed rather than losing the edit",
+        )
+    }
+
+    @Test
     fun `turns an income draft into the same row the desktop would write`() {
         assertEquals(
             cases("incomeColumns").map { it.jsonPrimitive.content },
