@@ -357,9 +357,21 @@ object Rows {
         params = listOf(SyncValue.Text(table), SyncValue.Text(uid)),
     )
 
-    /** The fields a record carries that this database has no column for. */
+    /**
+     * The fields a record carries that this database has no column for.
+     *
+     * Sorted, because the result is written to a row that the other device
+     * reads back and compares: two devices that list the same unknown columns in
+     * a different order would disagree about whether anything changed.
+     *
+     * Sorted this way rather than with toSortedMap, which is JVM-only and does
+     * not exist for iOS. The ordering is identical — both are the natural order
+     * of the keys — and the keys here are column names, so nothing rests on how
+     * two locales would rank the same pair of letters.
+     */
     fun unknownFields(shape: TableShape, r: ChangeRecord): Map<String, SyncValue> {
         val known = shape.columns.toSet()
-        return r.fields.filterKeys { it !in known }.toSortedMap()
+        val unknown = r.fields.filterKeys { it !in known }
+        return unknown.keys.sorted().associateWith { unknown.getValue(it) }
     }
 }

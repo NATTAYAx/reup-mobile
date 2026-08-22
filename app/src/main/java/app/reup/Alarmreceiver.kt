@@ -167,7 +167,16 @@ class AlarmReceiver : BroadcastReceiver() {
             // shade while nobody is looking. Keyed on the uid's hash rather than
             // the row id, for the reason TaskRepo gives: a row id means a
             // different task on each device.
-            Notifications.post(context, id = taskId.hashCode(), title = label, body = body)
+            // The uid goes with it so the notification can carry a button that
+            // ticks this row without opening anything. The test notification
+            // above passes none, and gets none.
+            Notifications.post(
+                context,
+                id = taskId.hashCode(),
+                title = label,
+                body = body,
+                taskId = taskId,
+            )
 
             Scheduler.reschedule(context)
         }

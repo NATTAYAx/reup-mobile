@@ -159,6 +159,18 @@
             android:exported="false" />
 
         <!--
+          The button in the notification shade. Not exported: the only thing
+          that ever sends this is a PendingIntent this app built and handed to
+          the system, and the system sends it back as this app. Exporting it
+          would mean any installed app could tick tasks off by broadcasting a
+          uid it guessed, which is a small thing to be able to do to somebody
+          and no thing at all to gain.
+        -->
+        <receiver
+            android:name=".DoneReceiver"
+            android:exported="false" />
+
+        <!--
           Exported, because the sender is the system rather than this app. All
           three of these are protected broadcasts that only the OS is allowed to
           send, so exporting costs nothing.

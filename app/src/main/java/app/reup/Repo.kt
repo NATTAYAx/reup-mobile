@@ -131,17 +131,65 @@ object Repo {
             return null
         }
 
-        // Both instants are spelled by isoMillis rather than by toString, because
-        // kotlinx-datetime prints the shortest form it can and the desktop always
-        // prints milliseconds. This column is compared as a string and never
-        // parsed, so two spellings of one moment is a tick that looks like it
-        // moved when nothing happened. See isoMillis.
-        val next = nextReset(task.spec, now, zone)?.let { isoMillis(it.toEpochMilliseconds()) }
-        val until = doneUntil(task.spec.resetType, next, isoMillis(endOfLocalDay(now, zone)))
-            ?: return null
-
+        val until = untilFor(task, now, zone) ?: return null
         repo.markDone(task.id, until)
         return until
+    }
+
+    /**
+     * What `completed_until` becomes for one tick of this task.
+     *
+     * Pulled out of toggleDone so that the notification's own button cannot end
+     * up with a second answer to the same question. It is the kind of rule that
+     * looks safe to retype — four lines, no branches to speak of — and would
+     * then be two rules the day either one is changed.
+     *
+     * Both instants are spelled by isoMillis rather than by toString, because
+     * kotlinx-datetime prints the shortest form it can and the desktop always
+     * prints milliseconds. This column is compared as a string and never parsed,
+     * so two spellings of one moment is a tick that looks like it moved when
+     * nothing happened. See isoMillis.
+     */
+    private fun untilFor(task: ScheduledTask, now: Instant, zone: TimeZone): String? {
+        val next = nextReset(task.spec, now, zone)?.let { isoMillis(it.toEpochMilliseconds()) }
+        return doneUntil(task.spec.resetType, next, isoMillis(endOfLocalDay(now, zone)))
+    }
+
+    /**
+     * Tick one task done by uid, and never the other way.
+     *
+     * This is what the button in the notification shade calls, and the
+     * difference from [toggleDone] is the whole reason it exists rather than
+     * reusing that one.
+     *
+     * A toggle asks "what state is it in" and flips. From a screen that is fine:
+     * the row is in front of somebody and the answer is visible. From the shade
+     * it is a trap. The notification was posted at eight; the tick could have
+     * happened on the desktop at ten past and synced down at quarter past; the
+     * notification is still sitting there because nothing takes it back. Pressing
+     * it then would UNTICK a task that was already done, silently, and the only
+     * evidence would be an alarm going off again later.
+     *
+     * So already-done is success and writes nothing. The button means done, not
+     * "the other one".
+     *
+     * @return false only when there is no such task any more, which happens when
+     *         it was deleted on the desktop while the notification sat in the
+     *         shade. The shade is not a place to report that to anybody, but the
+     *         log is.
+     */
+    suspend fun markDoneOnce(
+        ctx: Context,
+        taskId: String,
+        now: Instant,
+        zone: TimeZone,
+    ): Boolean {
+        val repo = open(ctx)
+        val task = repo.tasks().firstOrNull { it.id == taskId } ?: return false
+        if (isDoneNow(repo.completions()[taskId], isoMillis(now.toEpochMilliseconds()))) return true
+        val until = untilFor(task, now, zone) ?: return false
+        repo.markDone(taskId, until)
+        return true
     }
 
     /**

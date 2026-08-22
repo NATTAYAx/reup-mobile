@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
+import android.net.Uri
 
 /**
  * Posting the notification, and the two defaults that matter more than the rest
@@ -27,6 +29,13 @@ import android.content.Intent
  *
  * Both are choices about the person holding the phone rather than about
  * software, and both are much harder to add later than to start with.
+ *
+ * AND ONE BUTTON. The thing a person does after reading one of these is tick it
+ * off, and until now that meant unlocking, finding the app, waiting for a list
+ * to load and pressing a row — for an action that is already fully described by
+ * the notification they are looking at. This is the one thing a phone can do
+ * that the card on the desktop cannot, and it is the reason the phone was worth
+ * building at all.
  */
 object Notifications {
 
@@ -55,7 +64,13 @@ object Notifications {
         manager.createNotificationChannel(channel)
     }
 
-    fun post(context: Context, id: Int, title: String, body: String) {
+    /**
+     * @param taskId the row this is about, or null when it is about nothing —
+     *        the test notification, which must keep working on a phone whose
+     *        database is empty. No uid, no button: a button that ticks nothing
+     *        is worse than no button, because it looks like it worked.
+     */
+    fun post(context: Context, id: Int, title: String, body: String, taskId: String? = null) {
         val manager = context.getSystemService(NotificationManager::class.java)
 
         val open = PendingIntent.getActivity(
@@ -75,7 +90,7 @@ object Notifications {
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
 
-        val notification = Notification.Builder(context, CHANNEL_RESETS)
+        val builder = Notification.Builder(context, CHANNEL_RESETS)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
             .setContentText(body)
@@ -84,8 +99,45 @@ object Notifications {
             .setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setPublicVersion(redacted)
-            .build()
 
-        manager.notify(id, notification)
+        if (taskId != null) {
+            // ── WHY THE REQUEST CODE AND THE DATA BOTH CARRY THE ROW ──────────
+            //
+            // Two PendingIntents are the same object to the system when their
+            // action, data, type, class and categories match. Extras are not on
+            // that list. So eight of these built the obvious way — same class,
+            // no data, only the uid differing in an extra — are one
+            // PendingIntent, and FLAG_UPDATE_CURRENT quietly points every one of
+            // them at whichever task was posted last.
+            //
+            // Nothing about that fails. Every button works, every press ticks
+            // something off, and it is the wrong row. The only trace is a task
+            // that goes quiet without being touched and another that keeps
+            // ringing.
+            //
+            // The request code alone would be enough here, since it is the
+            // notification id and that is already the uid's hash. The uri is
+            // belt as well as braces, and it also makes the intent readable in a
+            // log, which the extras are not.
+            val done = PendingIntent.getBroadcast(
+                context,
+                id,
+                Intent(context, DoneReceiver::class.java)
+                    .setData(Uri.parse("reup://done/" + Uri.encode(taskId)))
+                    .putExtra(DoneReceiver.EXTRA_TASK_ID, taskId)
+                    .putExtra(DoneReceiver.EXTRA_NOTIFICATION_ID, id),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+
+            builder.addAction(
+                Notification.Action.Builder(
+                    Icon.createWithResource(context, android.R.drawable.checkbox_on_background),
+                    "เสร็จแล้ว",
+                    done,
+                ).build(),
+            )
+        }
+
+        manager.notify(id, builder.build())
     }
 }
