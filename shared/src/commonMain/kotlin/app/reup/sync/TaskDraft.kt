@@ -37,6 +37,7 @@ val TASK_COLUMNS: List<String> = listOf(
     "is_priority",
     "is_urgent",
     "min_step",
+    "notify_before_min",
     "time_zone",
     "intent",
 )
@@ -75,6 +76,14 @@ data class TaskDraft(
     val isPriority: Boolean = false,
     val isUrgent: Boolean = false,
     val minStep: String? = null,
+    /**
+     * Minutes before the moment itself that this actually has to start.
+     *
+     * A string like every other number here, because the box it comes from
+     * hands over text and the place that turns "60" into 60 should be the same
+     * place that decides what "" means.
+     */
+    val notifyBeforeMin: String? = null,
     val timeZone: String? = null,
     val intent: String? = null,
 )
@@ -120,7 +129,7 @@ private fun num(v: String?): Double? {
     return v.trim().toDoubleOrNull()
 }
 
-/** The sixteen values, in [TASK_COLUMNS] order. */
+/** The seventeen values, in [TASK_COLUMNS] order. */
 fun taskValues(d: TaskDraft): List<SyncValue> {
     fun text(s: String?): SyncValue = if (s == null) SyncValue.Null else SyncValue.Text(s)
     fun number(n: Double?): SyncValue = if (n == null) SyncValue.Null else SyncValue.Num(n)
@@ -139,6 +148,7 @@ fun taskValues(d: TaskDraft): List<SyncValue> {
         SyncValue.Num(if (d.isPriority) 1.0 else 0.0),
         SyncValue.Num(if (d.isUrgent) 1.0 else 0.0),
         text(sanitizeText(d.minStep)),
+        number(num(d.notifyBeforeMin)),
         text(sanitizeText(d.timeZone)),
         if (d.intent == "want" || d.intent == "must") SyncValue.Text(d.intent) else SyncValue.Null,
     )
@@ -234,6 +244,7 @@ val TASK_EDITABLE: Map<String, String> = linkedMapOf(
     "is_priority" to "flag",
     "is_urgent" to "flag",
     "min_step" to "clean",
+    "notify_before_min" to "int",
     "time_zone" to "clean",
     "intent" to "intent",
 )

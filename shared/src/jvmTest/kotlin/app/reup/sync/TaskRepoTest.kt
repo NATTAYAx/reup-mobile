@@ -15,12 +15,18 @@ import kotlin.test.assertTrue
 // Everything else in this package is held by either the compiler or a vector
 // file. TaskRepo is held by neither. Its column names live inside string
 // literals, and a string literal agrees with a database schema only for as long
-// as somebody remembers that it should. On this build nobody did: the query
-// asked for `notify_before_min`, a column that exists in no schema on either
-// side, and SQLite refused to compile the statement. The result was the task
+// as somebody remembers that it should. On the build that broke, nobody did: the
+// query asked for `notify_before_min`, which at the time existed in no schema on
+// either side, and SQLite refused to compile the statement. The result was the task
 // list reading as "cannot open" on a build where :shared:jvmTest was green and
 // :app:assembleDebug succeeded — which is exactly the shape of failure that
 // green tests are supposed to rule out.
+//
+// That column has since been added on the desktop and the query no longer names
+// any column at all, so neither half of that failure can happen the same way
+// again. The check stays because the reason for it did not go anywhere: the
+// mapper still reads names out of string literals, and the next one to drift
+// will drift the same way.
 //
 // So this file does the one thing the compiler cannot: it reads SCHEMA_SQL, the
 // same generated constant the phone actually runs at startup, and checks that
@@ -47,6 +53,7 @@ class TaskRepoTest {
         "event_end",
         "specific_date",
         "time_zone",
+        "notify_before_min",
         "paused_until",
         "is_active",
         "deleted",
@@ -55,19 +62,19 @@ class TaskRepoTest {
     /**
      * Columns the engine supports but the desktop has never shipped.
      *
-     * `notifyBeforeMin` is a real field on ScheduledTask with real tests in
-     * HorizonTest, and the mapper reads it, so the day the column is added to
-     * schema.sql it starts working with no code change here. Until then it
-     * reads as absent, which the engine treats as "ring at the reset" — the
-     * behaviour the desktop has always had anyway.
+     * Empty now. `notify_before_min` sat here for a month: a real field on
+     * ScheduledTask with real tests in HorizonTest, read by the mapper, and
+     * absent from every database it ever ran against — so the lead time it
+     * computed was always null and the alarm always rang at the reset.
      *
-     * Naming it here rather than deleting the read is the difference between a
-     * gap that is written down and a gap somebody has to rediscover from a
-     * screenshot. When the column ships, move it up into [required].
+     * It shipped on the desktop and moved up into [required], which is the
+     * whole reason for keeping a list like this rather than deleting the read:
+     * the day the column arrived, the phone started using it with no change to
+     * any Kotlin at all.
+     *
+     * Leave the list here. The next one goes in it.
      */
-    private val pending: List<String> = listOf(
-        "notify_before_min",
-    )
+    private val pending: List<String> = emptyList()
 
     @Test
     fun `every column the query depends on exists in the schema`() {

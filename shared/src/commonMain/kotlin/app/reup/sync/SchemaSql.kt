@@ -341,4 +341,6 @@ const val SCHEMA_SQL: String =
     "ALTER TABLE expected_income ADD COLUMN uid TEXT;\n" +
     "-- @@\n" +
     "ALTER TABLE expected_income ADD COLUMN updated_at TEXT;\n" +
+    "-- @@\n" +
+    "ALTER TABLE tasks ADD COLUMN notify_before_min INTEGER;\n" +
     "-- @@\n"
