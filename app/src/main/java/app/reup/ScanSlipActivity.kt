@@ -118,10 +118,33 @@ class ScanSlipActivity : Activity() {
             try {
                 val bitmap = load(uri)
                 if (bitmap == null) { status.text = NO_IMAGE; return@launch }
-                val text = SlipOcr.read(this@ScanSlipActivity, bitmap)
+                val result = SlipOcr.read(this@ScanSlipActivity, bitmap)
                 bitmap.recycle()
-                rawBox.text = if (text.isBlank()) NOTHING_READ else text
-                readingBox.text = describe(readSlip(text))
+                when (result) {
+                    is SlipRead.Ok -> {
+                        rawBox.text = result.text
+                        readingBox.text = describe(readSlip(result.text))
+                    }
+                    // The three below are why this returns a result and not a
+                    // string. They are fixed in three different places, and a
+                    // blank page says none of that.
+                    is SlipRead.MissingData -> {
+                        rawBox.text = NO_DATA
+                        readingBox.text = "assets/tessdata: ${result.present}"
+                    }
+                    SlipRead.InitFailed -> {
+                        rawBox.text = INIT_FAILED
+                        readingBox.text = ""
+                    }
+                    SlipRead.NoText -> {
+                        rawBox.text = NOTHING_READ
+                        readingBox.text = describe(readSlip(""))
+                    }
+                    is SlipRead.Failed -> {
+                        rawBox.text = "${FAILED} ${result.message}"
+                        readingBox.text = ""
+                    }
+                }
                 status.text = ""
             } catch (e: Exception) {
                 status.text = "${FAILED} ${e.message ?: e.toString()}"
@@ -208,7 +231,15 @@ class ScanSlipActivity : Activity() {
         private const val WORKING = "\u0e01\u0e33\u0e25\u0e31\u0e07\u0e2d\u0e48\u0e32\u0e19"
         private const val FAILED = "\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49"
         private const val NO_IMAGE = "\u0e40\u0e1b\u0e34\u0e14\u0e23\u0e39\u0e1b\u0e19\u0e35\u0e49\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49"
-        private const val NOTHING_READ = "(\u0e44\u0e21\u0e48\u0e21\u0e35\u0e02\u0e49\u0e2d\u0e04\u0e27\u0e32\u0e21)"
+        private const val NOTHING_READ =
+            "(\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e14\u0e49 \u0e41\u0e15\u0e48\u0e44\u0e21\u0e48\u0e21\u0e35\u0e15\u0e31\u0e27\u0e2b\u0e19\u0e31\u0e07\u0e2a\u0e37\u0e2d\u0e1a\u0e19\u0e20\u0e32\u0e1e)"
+
+        /** Not the same failure, and not fixed in the same file. */
+        private const val NO_DATA =
+            "(\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e44\u0e1f\u0e25\u0e4c\u0e20\u0e32\u0e29\u0e32 tha.traineddata \u0e43\u0e19 assets/tessdata)"
+
+        private const val INIT_FAILED =
+            "(\u0e21\u0e35\u0e44\u0e1f\u0e25\u0e4c\u0e20\u0e32\u0e29\u0e32 \u0e41\u0e15\u0e48 tesseract \u0e40\u0e23\u0e34\u0e48\u0e21\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49)"
 
         /** Deliberately in English: these two blocks are for reading, not using. */
         private const val RAW = "raw text"

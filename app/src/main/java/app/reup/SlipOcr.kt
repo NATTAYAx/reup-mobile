@@ -9,6 +9,24 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** What came off an image, or why nothing did. */
+sealed interface SlipRead {
+    /** Text, and at least one non-blank character of it. */
+    data class Ok(val text: String) : SlipRead
+
+    /** No language data. [present] is whatever is in assets/tessdata instead. */
+    data class MissingData(val present: String) : SlipRead
+
+    /** The language data is there and Tesseract would not start on it. */
+    data object InitFailed : SlipRead
+
+    /** It read the image and there was nothing on it. */
+    data object NoText : SlipRead
+
+    /** Anything else, said in whatever words the exception used. */
+    data class Failed(val message: String) : SlipRead
+}
+
 /**
  * Reading the words off a slip, on the phone.
  *
@@ -39,10 +57,26 @@ import java.io.File
  * stream. Assets inside an APK have neither, so the file is copied to the app's
  * private directory on first use and read from there afterwards.
  *
- * Copied by size rather than by "does it exist", because the failure worth
- * catching is a half-written file from a copy that was interrupted — which
- * exists, and which Tesseract will open and then fail on in a way that reads as
- * a broken install rather than a broken file.
+ * The first version of this compared the copy against the asset's length, read
+ * with openFd, so that a half-written file from an interrupted copy would be
+ * replaced rather than opened. openFd only works on assets aapt left
+ * uncompressed, and .traineddata is not on its list of extensions to leave
+ * alone, so it threw on every run — was caught, logged as a missing asset, and
+ * returned no text at all. The screen showed a blank page for a file that was
+ * sitting right there.
+ *
+ * Copied through a `.part` file and renamed instead. An interrupted copy leaves
+ * a `.part` behind and never becomes the real name, which is the thing the
+ * length check was protecting against, without needing to know the length.
+ *
+ * ─── AND WHY IT SAYS WHICH FAILURE ──────────────────────────────────────────
+ *
+ * Every path used to end in an empty string. The screen this feeds exists
+ * specifically to tell causes apart, and it was being handed one answer for
+ * four of them: no language file, Tesseract refusing to start, an image with no
+ * text on it, and a crash. Nothing about the blank page said which, and the
+ * answer was in logcat, which is a place nobody is standing when they are
+ * looking at a slip.
  */
 object SlipOcr {
 
@@ -61,32 +95,48 @@ object SlipOcr {
     private val FILES = listOf("tha.traineddata", "eng.traineddata")
 
     /**
-     * Every line of text on the image, or an empty string.
+     * What came off the image, or why nothing did.
      *
-     * Empty rather than an exception on failure: this is called from a screen
-     * whose job is to show what was read, and a blank page there is a readable
-     * answer. What went wrong goes to the log, where it can be looked at without
-     * being put in front of somebody who was trying to record a coffee.
+     * A result rather than a string, so the screen can say which of the four
+     * things happened. It still never throws: this is called from a screen
+     * whose job is to show what was read, and an exception there would replace
+     * the answer with a stack trace.
      */
-    suspend fun read(ctx: Context, bitmap: Bitmap): String = withContext(Dispatchers.IO) {
-        val dir = prepare(ctx) ?: return@withContext ""
+    suspend fun read(ctx: Context, bitmap: Bitmap): SlipRead = withContext(Dispatchers.IO) {
+        val dir = prepare(ctx) ?: return@withContext SlipRead.MissingData(assetList(ctx))
         val tess = TessBaseAPI()
         try {
             if (!tess.init(dir.absolutePath, LANGUAGES)) {
                 Log.e(TAG, "tesseract refused to initialise with $LANGUAGES in $dir")
-                return@withContext ""
+                return@withContext SlipRead.InitFailed
             }
             tess.setImage(bitmap)
-            tess.utF8Text ?: ""
+            val text = tess.utF8Text ?: ""
+            if (text.isBlank()) SlipRead.NoText else SlipRead.Ok(text)
         } catch (e: Exception) {
             Log.e(TAG, "could not read the image", e)
-            ""
+            SlipRead.Failed(e.message ?: e.toString())
         } finally {
             // Native memory. Not garbage collected, and a second scan on a
             // leaked instance is how this ends up being blamed for the phone
             // getting warm.
             try { tess.recycle() } catch (_: Exception) { }
         }
+    }
+
+    /**
+     * What is actually in assets/tessdata, for the message when nothing is.
+     *
+     * The two failures here look identical from the outside — an empty folder
+     * and a file under a name this does not expect — and they are fixed
+     * differently. Listing what is there says which without anybody opening a
+     * terminal.
+     */
+    private fun assetList(ctx: Context): String = try {
+        val names = ctx.assets.list("tessdata")?.toList() ?: emptyList()
+        if (names.isEmpty()) "(empty)" else names.joinToString(", ")
+    } catch (_: Exception) {
+        "(no tessdata folder)"
     }
 
     /**
@@ -102,17 +152,24 @@ object SlipOcr {
         }
         for (name in FILES) {
             val target = File(data, name)
+            if (target.exists() && target.length() > 0L) continue
+            val part = File(data, "$name.part")
             try {
-                val expected = ctx.assets.openFd("tessdata/$name").use { it.length }
-                if (target.exists() && target.length() == expected) continue
                 ctx.assets.open("tessdata/$name").use { input ->
-                    target.outputStream().use { input.copyTo(it) }
+                    part.outputStream().use { input.copyTo(it) }
+                }
+                // Only now does it get the name Tesseract looks for. A copy cut
+                // short leaves a .part behind and is retried next time, rather
+                // than leaving a truncated file that opens and then fails in a
+                // way that reads as a broken install.
+                if (!part.renameTo(target)) {
+                    Log.e(TAG, "could not put $part in place")
+                    return null
                 }
             } catch (e: Exception) {
-                // Almost always the file simply not being in assets yet. Said
-                // plainly, because the alternative is Tesseract failing to
-                // initialise later with a message about a language pack.
+                // Almost always the file simply not being in assets yet.
                 Log.e(TAG, "missing or unreadable asset tessdata/$name", e)
+                part.delete()
                 return null
             }
         }
