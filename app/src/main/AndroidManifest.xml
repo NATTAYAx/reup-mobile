@@ -150,6 +150,17 @@
         </activity>
 
         <!--
+          The screen that shows what a recogniser read and what the rules made
+          of it, side by side. Not exported: nothing outside this app has any
+          business starting it, and it is a debugging surface before it is a
+          feature.
+        -->
+        <activity
+            android:name=".ScanSlipActivity"
+            android:exported="false" />
+
+
+        <!--
           Not exported: nothing outside the app ever sends to this. The
           PendingIntent the scheduler builds names the class explicitly, which
           works regardless.

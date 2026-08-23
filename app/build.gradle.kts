@@ -96,4 +96,5 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     // kotlinx-datetime arrives through :shared, which declares it as `api`
     // because Instant and TimeZone are part of nextReset()'s signature.
+    implementation(libs.tesseract4android)
 }

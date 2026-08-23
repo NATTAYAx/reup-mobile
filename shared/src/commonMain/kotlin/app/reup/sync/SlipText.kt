@@ -11,10 +11,20 @@
 // number and a full name — slipScanner.ts says so in its own header — which
 // makes it the single worst thing in the app to put in an outgoing request.
 //
-// So the phone reads slips on the device. Android has text recognition built
-// into ML Kit, it runs offline, and the picture never leaves. That decision is
-// reversible in exactly one place if it ever looks wrong: whatever produces the
-// text calls this, and this does not care where the text came from.
+// So the phone reads slips on the device, and the picture never leaves.
+//
+// The first version of this comment said that was ML Kit. It is not: ML Kit's
+// text recognition covers Latin, Chinese, Devanagari, Japanese and Korean, and
+// Thai is not one of them. It would have read the digits on a slip and none of
+// the words around them, which is worse than useless here, because the words
+// are what tells จำนวนเงิน apart from ค่าธรรมเนียม.
+//
+// Tesseract with tha.traineddata does read Thai, offline, and that is what the
+// app module uses. The claim was written from memory and checked one round
+// later, which is one round later than it should have been.
+//
+// Either way the decision is reversible in exactly one place: whatever produces
+// the text calls this, and this does not care where the text came from.
 //
 // Which splits the work in two. The part that needs a library nobody here can
 // compile is the part that turns a photograph into lines of text. The part that
@@ -28,8 +38,9 @@
 // payment. Buddhist years, the abbreviated Thai months, fees listed separately,
 // the reference under เลขที่รายการ.
 //
-// What is NOT known is the exact text ML Kit hands back for a real slip — the
-// line order, what it does with the two-column layouts, whether it keeps the ฿.
+// What is NOT known is the exact text the recogniser hands back for a real
+// slip — the line order, what it does with two-column layouts, whether it keeps
+// the ฿, how badly Thai comes out at slip resolution.
 // Nothing here leans on line order for that reason, and the tests are written
 // against text assembled by hand rather than captured from a phone.
 //

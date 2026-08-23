@@ -5,6 +5,7 @@ kotlinxSerialization = "1.8.0"
 kotlinxCoroutines = "1.10.2"
 junitPlatform = "1.11.4"
 agp = "9.3.0"
+tesseract = "4.8.0"
 
 [libraries]
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
@@ -14,6 +15,11 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 # Dispatchers, withContext and launching a coroutine from a click listener
 # are the library, and those all live on the Android side.
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+# On-device OCR. Thai is the reason this is here rather than ML Kit — see the
+# header of SlipOcr.kt. Standard variant, not the OpenMP one: a slip is one
+# still image read once, and the extra threads buy latency nobody is waiting on
+# while adding native libraries to the APK.
+tesseract4android = { module = "cz.adaptech.tesseract4android:tesseract4android", version.ref = "tesseract" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitPlatform" }

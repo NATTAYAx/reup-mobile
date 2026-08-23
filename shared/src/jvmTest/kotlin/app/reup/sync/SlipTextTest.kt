@@ -9,9 +9,9 @@
 //
 // So these hold the rules — the fee is not the amount, a Buddhist year is not
 // the year, two candidates is a refusal — and they hold nothing at all about
-// whether ML Kit hands the lines back in this shape. That question gets its
-// answer the first time a real slip is photographed, and the screen that does
-// it is built to show the raw text next to the reading for exactly that reason.
+// whether the recogniser hands the lines back in this shape. That question gets
+// its answer the first time a real slip is read, and the screen that does it is
+// built to show the raw text next to the reading for exactly that reason.
 
 package app.reup.sync
 

@@ -168,6 +168,16 @@ class MainActivity : Activity() {
             true
         }
 
+        // Reading a slip, which for now means looking at what a recogniser made
+        // of one. It writes nothing yet and is here rather than buried in a
+        // menu because the whole point of it is to be run against a real slip
+        // early — see ScanSlipActivity.
+        val scanButton = Button(this)
+        scanButton.text = "\u0e2d\u0e48\u0e32\u0e19\u0e2a\u0e25\u0e34\u0e1b"
+        scanButton.setOnClickListener {
+            startActivity(Intent(this, ScanSlipActivity::class.java))
+        }
+
         val addButton = Button(this)
         addButton.text = "\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e07\u0e32\u0e19"
         addButton.setOnClickListener {
@@ -187,6 +197,7 @@ class MainActivity : Activity() {
         if (!Scheduler.exactAllowed(this)) column.addView(exactButton, rowParams())
         column.addView(addButton, rowParams())
         column.addView(spendButton, rowParams())
+        column.addView(scanButton, rowParams())
         column.addView(syncButton, rowParams())
 
         val scroll = ScrollView(this)
