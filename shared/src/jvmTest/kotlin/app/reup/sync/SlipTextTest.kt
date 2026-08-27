@@ -105,6 +105,63 @@ class SlipTextTest {
         assertTrue(empty.problems.containsAll(listOf("no-amount", "no-currency", "no-date")))
     }
 
+    /**
+     * The first slip anybody actually read, copied off the phone character for
+     * character, noise included.
+     *
+     * Three things in it were not guessed at beforehand: Thai digits come back
+     * as Thai digits, zeros come back as the letter o, and a label can land on
+     * one line with its number on another. All three are now handled, and this
+     * is here so they stay handled.
+     */
+    private val realTopUp = listOf(
+        "เติมเงินสำเร็จ                K",
+        "27 ส.ค. 69 17:04 น.                +",
+        "น.ส. ณัฐธยาน์ แ      Sea",
+        "ธ.กสิกรไทย          ว",
+        "พร้อมเพย์ อี-วอลเล็ต / o ii",
+        "   006-oo\u0E53oo\u0E533650 |",
+        "เลขที่รายการ:",
+        "1 \u201Ca 2",
+        "016239170445BPM19370    [\u0E52] ว i  [\u0E52]",
+        "ss     จ   \u0E555   ete     แร \u0E53 แก้ญ ไร แนรย",
+        "ค่าธรรมเนียม: ร ง Sizes [ต] ฟะเช  x",
+        "ENS            0.00 บาท    สแกนตรวจสอบสลิป",
+        "รายละเอียด: ณัฐธยาน์ แย้มหลั่งทรัพย์",
+    ).joinToString("\n")
+
+    @Test
+    fun `a real slip, exactly as it came back`() {
+        val r = readSlip(realTopUp)
+        assertEquals("2026-08-27", r.date)
+        assertEquals("THB", r.currency)
+        assertEquals("016239170445BPM19370", r.reference, "two lines under its label, past the noise")
+        // The amount is not on this page at all — the recogniser did not
+        // return it. Saying so is the right answer; the fee sitting there at
+        // 0.00 is not a substitute for it.
+        assertEquals(null, r.amount)
+        assertTrue(r.problems.contains("no-amount"))
+    }
+
+    @Test
+    fun `a label on one line and its number on the next is still that label`() {
+        // On the real slip the fee label came back with no digits on it and
+        // its 0.00 arrived underneath. A fee that is not zero would otherwise
+        // have been read as the amount, which is the one wrong answer that
+        // costs money rather than a blank.
+        val withFee = realTopUp.replace("0.00 บาท", "35.00 บาท")
+        assertEquals(null, readSlip(withFee).amount)
+    }
+
+    @Test
+    fun `thai digits are digits, and zeros read as letters are zeros`() {
+        assertEquals(250.0, readSlip("จำนวนเงิน \u0E52\u0E55\u0E50.\u0E50\u0E50 บาท").amount)
+        assertEquals(100.0, readSlip("จำนวนเงิน 1oo.oo บาท").amount)
+        // But only inside something already numeric. A word that happens to
+        // contain an o is a word.
+        assertEquals(12.0, readSlip("Total Amount 12.00 บาท").amount)
+    }
+
     @Test
     fun `baht is read from whichever way it was printed`() {
         assertEquals("THB", readSlip("จำนวนเงิน ฿250.00").currency)

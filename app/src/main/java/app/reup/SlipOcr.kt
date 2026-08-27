@@ -110,6 +110,20 @@ object SlipOcr {
                 Log.e(TAG, "tesseract refused to initialise with $LANGUAGES in $dir")
                 return@withContext SlipRead.InitFailed
             }
+            // ── WHY THE PAGE MODE IS NOT THE DEFAULT ─────────────────────
+            //
+            // The default assumes one block of ordinary text in one column.
+            // A slip is not that: a headline, a large amount, two columns of
+            // labels, a QR code, and a footer. On the first real slip read
+            // here, everything came back EXCEPT the amount — which is the one
+            // line printed several times larger than the rest, and the one a
+            // single-column assumption is most likely to treat as furniture.
+            //
+            // SPARSE_TEXT looks for text anywhere on the page in any
+            // arrangement, which is what a slip is. It finds more, including
+            // more nonsense, and the rules in SlipText already refuse to guess
+            // when they see more than one candidate.
+            tess.pageSegMode = TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
             tess.setImage(bitmap)
             val text = tess.utF8Text ?: ""
             if (text.isBlank()) SlipRead.NoText else SlipRead.Ok(text)

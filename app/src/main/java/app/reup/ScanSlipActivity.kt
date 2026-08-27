@@ -5,15 +5,8 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Color
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
-import android.util.TypedValue
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import app.reup.sync.SlipReading
 import app.reup.sync.readSlip
@@ -64,30 +57,36 @@ class ScanSlipActivity : Activity() {
         super.onCreate(saved)
         title = TITLE
 
-        val column = LinearLayout(this)
-        column.orientation = LinearLayout.VERTICAL
-        column.setPadding(40, 40, 40, 40)
-        column.setBackgroundColor(Color.parseColor("#0E0E12"))
+        val screen = Ui.screen(this)
+        val column = screen.column
 
-        val pick = Button(this)
-        pick.text = PICK
-        pick.setOnClickListener { choose() }
+        val pick = Ui.primary(this, PICK) { choose() }
 
-        status = note("")
-        rawBox = mono()
-        readingBox = mono()
+        status = Ui.note(this, "")
+        rawBox = Ui.mono(this)
+        readingBox = Ui.mono(this)
+        // Selectable, so a reading that looks wrong can be copied into a
+        // message rather than photographed off the screen and typed out again.
+        rawBox.setTextIsSelectable(true)
+        readingBox.setTextIsSelectable(true)
 
-        column.addView(pick, row())
-        column.addView(status, row())
-        column.addView(label(RAW), row())
-        column.addView(rawBox, row())
-        column.addView(label(READ), row())
-        column.addView(readingBox, row())
+        column.addView(pick, Ui.row(this, 0f))
+        column.addView(status, Ui.row(this, 8f))
 
-        val scroll = ScrollView(this)
-        scroll.setBackgroundColor(Color.parseColor("#0E0E12"))
-        scroll.addView(column)
-        setContentView(scroll)
+        // Two panels rather than two blocks of text, because the whole point of
+        // this screen is that they are two different answers and one of them
+        // being wrong means something different from the other being wrong.
+        val rawCard = Ui.card(this)
+        rawCard.addView(Ui.label(this, RAW))
+        rawCard.addView(rawBox, Ui.row(this, 8f))
+        column.addView(rawCard, Ui.row(this, 16f))
+
+        val readCard = Ui.card(this)
+        readCard.addView(Ui.label(this, READ))
+        readCard.addView(readingBox, Ui.row(this, 8f))
+        column.addView(readCard, Ui.row(this, 12f))
+
+        setContentView(screen.scroll)
     }
 
     override fun onDestroy() {
@@ -186,41 +185,7 @@ class ScanSlipActivity : Activity() {
         append("problems  ${if (r.problems.isEmpty()) "none" else r.problems.joinToString(", ")}")
     }
 
-    private fun label(text: String): TextView {
-        val v = TextView(this)
-        v.text = text
-        v.setTextColor(Color.parseColor("#8A8A93"))
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        return v
-    }
 
-    private fun note(text: String): TextView {
-        val v = TextView(this)
-        v.text = text
-        v.setTextColor(Color.parseColor("#B9B9C0"))
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-        return v
-    }
-
-    private fun mono(): TextView {
-        val v = TextView(this)
-        v.setTextColor(Color.parseColor("#E8E8EA"))
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        v.typeface = Typeface.MONOSPACE
-        // Selectable so a reading that looks wrong can be copied into a message
-        // rather than photographed off the screen and typed out again.
-        v.setTextIsSelectable(true)
-        return v
-    }
-
-    private fun row(): LinearLayout.LayoutParams {
-        val p = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        )
-        p.topMargin = 24
-        return p
-    }
 
     companion object {
         private const val PICK_IMAGE = 4101

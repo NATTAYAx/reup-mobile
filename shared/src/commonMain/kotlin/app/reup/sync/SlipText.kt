@@ -74,6 +74,62 @@ data class SlipReading(
     val problems: List<String> = emptyList(),
 )
 
+// ─── what a recogniser actually hands back ───────────────────────────────────
+//
+// From a real K PLUS slip, read on the phone:
+//
+//   27 ส.ค. 69 17:04 น.
+//   2оо-%-%8762-%
+//   006-ooതooത3650
+//   016239170445BPM19370
+//   ค่าธรรมเนียม: ร ง Sizes [ต] ฟะเช x
+//   ENS            0.00 บาท
+//
+// Three things in that which were not guessed at beforehand.
+//
+// THAI DIGITS COME BACK AS THAI DIGITS. ๐ ๒ ๓ ๕ appear mixed into otherwise
+// Latin numbers, because the font renders them and tha.traineddata knows them.
+// A number regex over Arabic digits alone sees `๕5` as `5`.
+//
+// ZEROS COME BACK AS THE LETTER o. `2оо-%-%8762` is an account number, and
+// `006-ooതooത3650` is a phone number. Round glyphs at slip resolution are a
+// coin toss.
+//
+// LABELS AND THEIR VALUES LAND ON DIFFERENT LINES. `ค่าธรรมเนียม:` came back
+// with no number on it at all, and its 0.00 arrived on the line below next to a
+// word that is not a word. Anything that excludes a line by its label has to
+// look one line further, or a fee of two hundred becomes the amount.
+
+/** Thai digits to Arabic. Everything else is left exactly as it was. */
+private fun arabicDigits(text: String): String {
+    val sb = StringBuilder(text.length)
+    for (ch in text) {
+        sb.append(if (ch in '\u0E50'..'\u0E59') ('0' + (ch - '\u0E50')) else ch)
+    }
+    return sb.toString()
+}
+
+/**
+ * `o` and `O` back to zero, but only inside something already mostly digits.
+ *
+ * Doing it everywhere would turn บาท-adjacent words and every English label
+ * into gibberish. Doing it nowhere loses a phone number, an account number and
+ * — the one that matters — any amount whose zeros were read as letters.
+ */
+private fun repairZeros(text: String): String =
+    Regex("""[0-9oO][0-9oO,.\-]{2,}""").replace(text) { m ->
+        val token = m.value
+        // One real digit is enough. `1oo.oo` is a hundred baht and has four
+        // letters to one digit, so counting them against each other loses the
+        // case this exists for. The pattern already refuses anything holding a
+        // letter other than o, so a word cannot get in here.
+        if (token.any { it.isDigit() }) {
+            token.replace('o', '0').replace('O', '0')
+        } else {
+            token
+        }
+    }
+
 // A number as banks print it: grouped with commas, two decimals, sometimes not.
 private val NUMBER = Regex("""\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?""")
 
@@ -109,7 +165,10 @@ private val REFERENCE_LABEL = Regex(
  * happens to be on, because a recogniser reading a two-column slip may hand
  * back the right column first and there is no way to know from here.
  */
-fun readSlip(text: String): SlipReading {
+fun readSlip(raw: String): SlipReading {
+    // Normalised once, at the door. Every rule below reads the repaired text,
+    // so none of them has to know that a recogniser confuses o with 0.
+    val text = repairZeros(arabicDigits(raw))
     val lines = text.split("\n", "\r").map { it.trim() }.filter { it.isNotEmpty() }
     val problems = mutableListOf<String>()
 
@@ -140,8 +199,17 @@ private fun readAmount(lines: List<String>, problems: MutableList<String>): Doub
     data class Candidate(val value: Double, val labelled: Boolean)
 
     val found = mutableListOf<Candidate>()
-    for (line in lines) {
+    for ((i, line) in lines.withIndex()) {
         if (NOT_THE_AMOUNT.containsMatchIn(line)) continue
+        // A label whose own line carries no number has its value on the next
+        // one. Seen on a real slip: the fee label came back with no digits and
+        // its 0.00 arrived underneath. Without this, a fee that is not zero is
+        // a candidate for being the amount.
+        val above = lines.getOrNull(i - 1)
+        if (above != null &&
+            NOT_THE_AMOUNT.containsMatchIn(above) &&
+            !NUMBER.containsMatchIn(above)
+        ) continue
         val labelled = IS_THE_AMOUNT.containsMatchIn(line)
         val money = Regex("฿|บาท|THB").containsMatchIn(line)
         if (!labelled && !money) continue
@@ -230,15 +298,20 @@ private fun iso(year: Int, month: Int, day: Int): String =
 private fun readReference(lines: List<String>): String? {
     for ((i, line) in lines.withIndex()) {
         if (!REFERENCE_LABEL.containsMatchIn(line)) continue
-        val here = Regex("""[A-Za-z0-9]{6,}""").findAll(line)
-            .map { it.value }
-            .filter { !REFERENCE_LABEL.containsMatchIn(it) }
-            .toList()
-        if (here.isNotEmpty()) return here.maxByOrNull { it.length }
-        // Labels sit above their value as often as beside it.
-        val next = lines.getOrNull(i + 1) ?: continue
-        val below = Regex("""^[A-Za-z0-9]{6,}$""").find(next.replace(" ", ""))
-        if (below != null) return below.value
+        // The label's own line first, then the next few. On a real slip the
+        // label was alone on its line and the number arrived two lines later,
+        // with a line of recogniser noise in between.
+        for (j in i..minOf(i + 3, lines.lastIndex)) {
+            val here = lines[j]
+            if (j != i && REFERENCE_LABEL.containsMatchIn(here)) break
+            val token = Regex("""[A-Za-z0-9]{10,}""").findAll(here)
+                .map { it.value }
+                // Mostly digits, which is what a reference is and what the
+                // words around it are not. `สแกนตรวจสอบสลิป` is long too.
+                .filter { t -> t.count { it.isDigit() } * 2 >= t.length }
+                .toList()
+            if (token.isNotEmpty()) return token.maxByOrNull { it.length }
+        }
     }
     return null
 }
