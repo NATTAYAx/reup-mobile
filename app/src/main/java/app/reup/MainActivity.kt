@@ -6,8 +6,6 @@ import android.app.AlarmManager
 import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -15,11 +13,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
-import android.util.TypedValue
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import app.reup.core.QuietHours
@@ -113,47 +108,36 @@ class MainActivity : Activity() {
         Notifications.ensureChannel(this)
         requestNotificationPermission()
 
-        status = TextView(this)
-        status.setTextColor(Color.parseColor("#E8E8EA"))
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-        status.typeface = Typeface.MONOSPACE
+        // Monospace, because it is read as columns: times under times, names
+        // under names. Everything else on this screen is prose and is not.
+        status = Ui.mono(this)
 
-        val testButton = Button(this)
-        testButton.text = "ทดสอบ: แจ้งเตือนในอีก 60 วินาที"
-        testButton.setOnClickListener {
+        val testButton = Ui.secondary(this, "ทดสอบ: แจ้งเตือนในอีก 60 วินาที") {
             Scheduler.fireTestIn(this, 60)
             Toast.makeText(this, "ตั้งแล้ว ปิดแอปแล้วล็อกจอรอได้เลย", Toast.LENGTH_LONG).show()
         }
 
-        val batteryButton = Button(this)
-        batteryButton.text = "เปิดหน้าตั้งค่าแบตเตอรี่ของแอป"
-        batteryButton.setOnClickListener {
+        val batteryButton = Ui.secondary(this, "เปิดหน้าตั้งค่าแบตเตอรี่ของแอป") {
             openBatterySettings()
         }
 
         // Only built when it is needed. A permanent button for a permission
         // that is already granted is a button that teaches people to ignore
         // buttons, and this screen has two of those already.
-        val exactButton = Button(this)
-        exactButton.text = "อนุญาตให้เตือนตรงเวลา"
-        exactButton.setOnClickListener { openExactAlarmSettings() }
+        val exactButton = Ui.secondary(this, "อนุญาตให้เตือนตรงเวลา") { openExactAlarmSettings() }
 
         // The only way into the sync screen. Deliberately a second screen and
         // not a section of this one: this screen is a live readout that redraws
         // every second, and text boxes that lose what is being typed into them
         // once a second are not text boxes.
-        val syncButton = Button(this)
-        syncButton.text = "ตั้งค่าซิงก์กับคอม"
-        syncButton.setOnClickListener {
+        val syncButton = Ui.secondary(this, "ตั้งค่าซิงก์กับคอม") {
             startActivity(Intent(this, SyncActivity::class.java))
         }
 
         // The money going out is spent standing up, and the machine it was
         // being recorded on is at a desk. That gap is why the numbers in the
         // app have never quite been the numbers.
-        val spendButton = Button(this)
-        spendButton.text = "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e40\u0e07\u0e34\u0e19"
-        spendButton.setOnClickListener {
+        val spendButton = Ui.primary(this, "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e40\u0e07\u0e34\u0e19") {
             startActivity(Intent(this, AddMoneyActivity::class.java))
         }
         // The screen has a switch at the top, so this is a shortcut rather
@@ -172,39 +156,48 @@ class MainActivity : Activity() {
         // of one. It writes nothing yet and is here rather than buried in a
         // menu because the whole point of it is to be run against a real slip
         // early — see ScanSlipActivity.
-        val scanButton = Button(this)
-        scanButton.text = "\u0e2d\u0e48\u0e32\u0e19\u0e2a\u0e25\u0e34\u0e1b"
-        scanButton.setOnClickListener {
+        val scanButton = Ui.secondary(this, "\u0e2d\u0e48\u0e32\u0e19\u0e2a\u0e25\u0e34\u0e1b") {
             startActivity(Intent(this, ScanSlipActivity::class.java))
         }
 
-        val addButton = Button(this)
-        addButton.text = "\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e07\u0e32\u0e19"
-        addButton.setOnClickListener {
+        val addButton = Ui.primary(this, "\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e07\u0e32\u0e19") {
             startActivity(Intent(this, AddTaskActivity::class.java))
         }
 
         ticks = LinearLayout(this)
         ticks.orientation = LinearLayout.VERTICAL
 
-        val column = LinearLayout(this)
-        column.orientation = LinearLayout.VERTICAL
-        column.setPadding(48, 64, 48, 64)
-        column.addView(status, rowParams())
-        column.addView(ticks, rowParams())
-        column.addView(testButton, rowParams())
-        column.addView(batteryButton, rowParams())
-        if (!Scheduler.exactAllowed(this)) column.addView(exactButton, rowParams())
-        column.addView(addButton, rowParams())
-        column.addView(spendButton, rowParams())
-        column.addView(scanButton, rowParams())
-        column.addView(syncButton, rowParams())
+        // Three groups, in the order the day uses them.
+        //
+        // What is due, then what is done about it, then the setup buttons that
+        // are pressed once ever. Before this they were ten identical slabs, and
+        // a screen where the battery-settings button is drawn as loudly as
+        // ticking something off is a screen that has not been asked what it is
+        // for.
+        val screen = Ui.screen(this)
+        val column = screen.column
 
-        val scroll = ScrollView(this)
-        scroll.setBackgroundColor(Color.parseColor("#0F0F12"))
-        scroll.addView(column)
+        val readout = Ui.card(this)
+        readout.addView(Ui.label(this, "\u0e04\u0e34\u0e27"))
+        readout.addView(status, Ui.row(this, 8f))
+        column.addView(readout, Ui.row(this, 0f))
 
-        setContentView(scroll)
+        column.addView(ticks, Ui.row(this, 4f))
+
+        column.addView(addButton, Ui.row(this, 20f))
+        column.addView(spendButton, Ui.row(this))
+
+        // Everything below the line is setup. The permission button is only
+        // built when it is missing, for the reason written where it is created.
+        column.addView(Ui.divider(this), Ui.dividerRow(this))
+        column.addView(Ui.label(this, "\u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32"), Ui.row(this, 8f))
+        column.addView(syncButton, Ui.row(this))
+        column.addView(scanButton, Ui.row(this))
+        column.addView(testButton, Ui.row(this))
+        column.addView(batteryButton, Ui.row(this))
+        if (!Scheduler.exactAllowed(this)) column.addView(exactButton, Ui.row(this))
+
+        setContentView(screen.scroll)
     }
 
     override fun onResume() {
@@ -316,15 +309,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun rowParams(): LinearLayout.LayoutParams {
-        val p = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        p.topMargin = 24
-        return p
-    }
-
     /**
      * One button per task, in the order the queue rings them.
      *
@@ -356,9 +340,12 @@ class MainActivity : Activity() {
 
         for (task in ordered) {
             val done = isDoneNow(completions[task.id], nowIso)
-            val button = Button(this)
-            button.text = (if (done) "✓ " else "☐ ") + (labels[task.id] ?: task.id)
-            button.setOnClickListener { onTick(task) }
+            val label = (if (done) "✓  " else "☐  ") + (labels[task.id] ?: task.id)
+            // A task already done reads as done rather than as another thing to
+            // press: same button, quieter ink.
+            val button = Ui.secondary(this, label) { onTick(task) }
+            button.gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
+            if (done) button.setTextColor(Ui.DIM)
             // Long press to edit. A tap is the thing this list is for and has
             // to stay a tap; opening a form by accident when reaching to tick
             // something off is worse than editing being slightly hidden.
@@ -369,7 +356,7 @@ class MainActivity : Activity() {
                 )
                 true
             }
-            ticks.addView(button, rowParams())
+            ticks.addView(button, Ui.row(this, 8f))
         }
     }
 
