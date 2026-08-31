@@ -85,13 +85,13 @@ object Notifications {
         // redacts to a generic app-name line, which is fine but says less than
         // it could.
         val redacted = Notification.Builder(context, CHANNEL_RESETS)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(R.drawable.ic_notify)
             .setContentTitle("มีบางอย่างถึงรอบแล้ว")
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
 
         val builder = Notification.Builder(context, CHANNEL_RESETS)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(R.drawable.ic_notify)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(Notification.BigTextStyle().bigText(body))
@@ -131,7 +131,7 @@ object Notifications {
 
             builder.addAction(
                 Notification.Action.Builder(
-                    Icon.createWithResource(context, android.R.drawable.checkbox_on_background),
+                    Icon.createWithResource(context, R.drawable.ic_done),
                     "เสร็จแล้ว",
                     done,
                 ).build(),
