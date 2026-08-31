@@ -62,8 +62,20 @@
       rclone or a NAS on the LAN works during setup, instead of failing with a
       platform error that names none of this.
     -->
+    <!--
+      android:icon was never set, so every launcher has been drawing the
+      platform default next to everything else on the home screen. The
+      adaptive pair it points at has been sitting in res/drawable since the
+      day the project was created, unreferenced.
+
+      minSdk is 26, so mipmap-anydpi answers for every phone that can run
+      this and the legacy webp files under mipmap-hdpi and friends are never
+      read. They can be deleted whenever somebody feels like it.
+    -->
     <application
         android:label="Reup"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
