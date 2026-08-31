@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The tick on the button inside a reminder.
+
+  It replaces android.R.drawable.checkbox_on_background, which is the platform's
+  drawable for the state of a checkbox widget — a filled square with a mark in
+  it, drawn for a form and not for a notification. Next to a line of text on a
+  lock screen it read as a solid blob.
+
+  Same stencil rule as the icon above: only the alpha survives, so this is a
+  stroke and nothing else. Round caps and joins because the mark sits at about
+  sixteen pixels and a square corner at that size reads as a chip in the line.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M5,12.5 L10,17.5 L19,6.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>
