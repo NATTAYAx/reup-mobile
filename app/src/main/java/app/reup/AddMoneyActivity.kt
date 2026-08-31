@@ -129,6 +129,16 @@ class AddMoneyActivity : Activity() {
         dateBox = field("วันที่", 0)
         dateBox.setText(LocalDate.now().toString())
 
+        // Filled in by whoever opened this screen, which right now is the slip
+        // reader. It hands over a reading rather than writing a row of its own,
+        // because the gate into the ledger is the save button on this screen
+        // and the finance layer has exactly one gate on purpose. A slip that
+        // saved itself would be a second way in, holding numbers a recogniser
+        // guessed at, which is the one kind of row nobody would think to check.
+        intent.getStringExtra(EXTRA_AMOUNT)?.let { if (it.isNotBlank()) amountBox.setText(it) }
+        intent.getStringExtra(EXTRA_DATE)?.let { if (it.isNotBlank()) dateBox.setText(it) }
+        intent.getStringExtra(EXTRA_NOTE)?.let { if (it.isNotBlank()) noteBox.setText(it) }
+
         unitLabel = label("")
         unitNote = note("")
         categoryLabel = label("หมวด")
@@ -684,6 +694,13 @@ class AddMoneyActivity : Activity() {
     companion object {
         /** Open straight into the payment side. Absent means spending. */
         const val EXTRA_INCOMING = "app.reup.incoming"
+
+        // Opened with a form already filled in. Strings rather than numbers:
+        // what arrives is what a recogniser read, and the person is about to
+        // look at it in a text box either way.
+        const val EXTRA_AMOUNT = "app.reup.amount"
+        const val EXTRA_DATE = "app.reup.date"
+        const val EXTRA_NOTE = "app.reup.note"
 
 
         private const val UNIT_GUESSED =

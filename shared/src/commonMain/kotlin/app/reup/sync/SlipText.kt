@@ -201,16 +201,37 @@ private fun readAmount(lines: List<String>, problems: MutableList<String>): Doub
     val found = mutableListOf<Candidate>()
     for ((i, line) in lines.withIndex()) {
         if (NOT_THE_AMOUNT.containsMatchIn(line)) continue
-        // A label whose own line carries no number has its value on the next
-        // one. Seen on a real slip: the fee label came back with no digits and
-        // its 0.00 arrived underneath. Without this, a fee that is not zero is
-        // a candidate for being the amount.
-        val above = lines.getOrNull(i - 1)
-        if (above != null &&
-            NOT_THE_AMOUNT.containsMatchIn(above) &&
-            !NUMBER.containsMatchIn(above)
-        ) continue
-        val labelled = IS_THE_AMOUNT.containsMatchIn(line)
+        // A label whose own line carries no number owns the next number below
+        // it. On the first real slip the fee label came back with no digits and
+        // its 0.00 arrived on the line underneath. On the second, three lines of
+        // recogniser rubbish sat in between:
+        //
+        //     .ค่าธรรมเนียม:
+        //     OF
+        //     แล
+        //     0.00 บาท
+        //
+        // So the owner of a bare number is the nearest label above it, reached
+        // across noise but never across another number — a line with its own
+        // digits owns them, and the chain stops there.
+        //
+        // This matters more than it looks. Without it a fee that is not zero
+        // becomes a second candidate, and two candidates means the reading is
+        // refused: a two baht transfer with a thirty-five baht fee would read
+        // as no amount at all.
+        var owner: String? = null
+        for (k in 1..4) {
+            val above = lines.getOrNull(i - k) ?: break
+            if (NUMBER.containsMatchIn(above)) break
+            if (IS_THE_AMOUNT.containsMatchIn(above) || NOT_THE_AMOUNT.containsMatchIn(above)) {
+                owner = above
+                break
+            }
+        }
+        if (owner != null && NOT_THE_AMOUNT.containsMatchIn(owner)) continue
+        // A number under จำนวน: is as labelled as one on the same line as it.
+        val labelled = IS_THE_AMOUNT.containsMatchIn(line) ||
+                (owner != null && IS_THE_AMOUNT.containsMatchIn(owner))
         val money = Regex("฿|บาท|THB").containsMatchIn(line)
         if (!labelled && !money) continue
         for (m in NUMBER.findAll(line)) {
@@ -298,10 +319,21 @@ private fun iso(year: Int, month: Int, day: Int): String =
 private fun readReference(lines: List<String>): String? {
     for ((i, line) in lines.withIndex()) {
         if (!REFERENCE_LABEL.containsMatchIn(line)) continue
-        // The label's own line first, then the next few. On a real slip the
-        // label was alone on its line and the number arrived two lines later,
-        // with a line of recogniser noise in between.
-        for (j in i..minOf(i + 3, lines.lastIndex)) {
+        // The label's own line first, then the next few. On the first real
+        // slip the label was alone on its line and the number arrived two lines
+        // later with one line of noise between them. On the second, from the
+        // same bank and the same app, the gap was four lines of noise:
+        //
+        //     เลขที่รายการ:
+        //     7 !
+        //     ie. 7
+        //     oe
+        //     016242153507527223
+        //
+        // So the window is six rather than three. It is still a window and not
+        // the whole page: a slip is covered in long digit strings, and the
+        // stopping conditions below are what keep an account number out of it.
+        for (j in i..minOf(i + 6, lines.lastIndex)) {
             val here = lines[j]
             if (j != i && REFERENCE_LABEL.containsMatchIn(here)) break
             val token = Regex("""[A-Za-z0-9]{10,}""").findAll(here)
