@@ -7,6 +7,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import app.reup.sync.SlipReading
 import app.reup.sync.readSlip
@@ -50,8 +52,18 @@ class ScanSlipActivity : Activity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private lateinit var status: TextView
+    private lateinit var intro: TextView
     private lateinit var rawBox: TextView
     private lateinit var readingBox: TextView
+    private lateinit var rawCard: LinearLayout
+    private lateinit var readCard: LinearLayout
+    private lateinit var useButton: Button
+
+    /** The last reading, kept so the button below has something to hand over. */
+    private var reading: SlipReading? = null
+
+    /** Whether anything has been asked of this screen yet. */
+    private var picked = false
 
     override fun onCreate(saved: Bundle?) {
         super.onCreate(saved)
@@ -70,7 +82,7 @@ class ScanSlipActivity : Activity() {
 
         val pick = Ui.primary(this, PICK) { choose() }
 
-        status = Ui.note(this, "")
+        status = Ui.status(this)
         rawBox = Ui.mono(this)
         readingBox = Ui.mono(this)
         // Selectable, so a reading that looks wrong can be copied into a
@@ -80,18 +92,38 @@ class ScanSlipActivity : Activity() {
 
         column.addView(status, Ui.row(this, 12f))
 
+        // Before a slip has been chosen there is nothing to show, so nothing is
+        // shown. Two labelled boxes with nothing inside them is the screen
+        // claiming to have something and then not having it, and that empty
+        // space was most of what this screen was.
+        intro = Ui.note(
+            this,
+            "เลือกรูปสลิปจากในเครื่อง แล้วหน้านี้จะโชว์สองอย่าง คือข้อความดิบที่" +
+                    "ตัวอ่านเห็น กับสิ่งที่กฎอ่านออกมาจากข้อความนั้น ยังไม่มีอะไรถูกบันทึก" +
+                    "ลงฐานข้อมูล",
+        )
+        column.addView(intro, Ui.row(this, 20f))
+
         // Two panels rather than two blocks of text, because the whole point of
         // this screen is that they are two different answers and one of them
         // being wrong means something different from the other being wrong.
-        val rawCard = Ui.card(this)
+        rawCard = Ui.card(this)
         rawCard.addView(Ui.label(this, RAW))
         rawCard.addView(rawBox, Ui.row(this, 8f))
         column.addView(rawCard, Ui.row(this, 16f))
 
-        val readCard = Ui.card(this)
+        readCard = Ui.card(this)
         readCard.addView(Ui.label(this, READ))
         readCard.addView(readingBox, Ui.row(this, 8f))
+        // Inside the card rather than in the bar at the bottom, because it is
+        // about these five lines and not about the screen. It also keeps the
+        // bar to one main action: two filled buttons side by side is two things
+        // claiming to be the point of the screen.
+        useButton = Ui.primary(this, USE) { use() }
+        readCard.addView(useButton, Ui.row(this, 14f))
         column.addView(readCard, Ui.row(this, 12f))
+
+        dress()
 
         screen.bar.addView(pick, Ui.cell(this, true))
         setContentView(screen.root)
@@ -117,10 +149,56 @@ class ScanSlipActivity : Activity() {
         scan(uri)
     }
 
+    /**
+     * A panel exists while it has something in it, and not before.
+     *
+     * The one branch worth naming: a failed read fills the raw panel with the
+     * reason and leaves the reading panel empty, and an empty reading panel
+     * under a heading reads as "the rules found nothing" rather than as "the
+     * rules were never asked". So it goes away instead.
+     */
+    private fun dress() {
+        Ui.show(intro, !picked)
+        Ui.show(rawCard, rawBox.text.isNotEmpty())
+        Ui.show(readCard, readingBox.text.isNotEmpty())
+        // Nothing to carry over without an amount, and a button that opens a
+        // form with one field filled in is a button that wasted a tap.
+        Ui.show(useButton, reading?.amount != null)
+    }
+
+    /**
+     * Hand the reading to the money screen, filled in but not saved.
+     *
+     * This is the whole difference between this screen being a diagnostic and
+     * being a feature, and it is the same shape the desktop uses: read, show,
+     * let a person look at it, and only then write. Nothing here touches the
+     * database.
+     *
+     * The note carries the reference number when there is one, so a row in the
+     * ledger can be traced back to the slip it came from months later. When
+     * there is not one it stays empty rather than inventing something.
+     */
+    private fun use() {
+        val r = reading ?: return
+        val amount = r.amount ?: return
+        val text =
+            if (amount == amount.toLong().toDouble()) amount.toLong().toString()
+            else amount.toString()
+        startActivity(
+            Intent(this, AddMoneyActivity::class.java)
+                .putExtra(AddMoneyActivity.EXTRA_AMOUNT, text)
+                .putExtra(AddMoneyActivity.EXTRA_DATE, r.date ?: "")
+                .putExtra(AddMoneyActivity.EXTRA_NOTE, r.reference ?: ""),
+        )
+    }
+
     private fun scan(uri: Uri) {
+        picked = true
+        reading = null
         status.text = WORKING
         rawBox.text = ""
         readingBox.text = ""
+        dress()
         scope.launch {
             try {
                 val bitmap = load(uri)
@@ -130,7 +208,9 @@ class ScanSlipActivity : Activity() {
                 when (result) {
                     is SlipRead.Ok -> {
                         rawBox.text = result.text
-                        readingBox.text = describe(readSlip(result.text))
+                        val read = readSlip(result.text)
+                        reading = read
+                        readingBox.text = describe(read)
                     }
                     // The three below are why this returns a result and not a
                     // string. They are fixed in three different places, and a
@@ -156,6 +236,7 @@ class ScanSlipActivity : Activity() {
             } catch (e: Exception) {
                 status.text = "${FAILED} ${e.message ?: e.toString()}"
             }
+            dress()
         }
     }
 
@@ -201,6 +282,10 @@ class ScanSlipActivity : Activity() {
 
         private const val TITLE = "\u0e2d\u0e48\u0e32\u0e19\u0e2a\u0e25\u0e34\u0e1b"
         private const val PICK = "\u0e40\u0e25\u0e37\u0e2d\u0e01\u0e23\u0e39\u0e1b\u0e2a\u0e25\u0e34\u0e1b"
+
+        /** บันทึกเป็นรายจ่าย */
+        private const val USE =
+            "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e40\u0e1b\u0e47\u0e19\u0e23\u0e32\u0e22\u0e08\u0e48\u0e32\u0e22"
         private const val WORKING = "\u0e01\u0e33\u0e25\u0e31\u0e07\u0e2d\u0e48\u0e32\u0e19"
         private const val FAILED = "\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49"
         private const val NO_IMAGE = "\u0e40\u0e1b\u0e34\u0e14\u0e23\u0e39\u0e1b\u0e19\u0e35\u0e49\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49"
