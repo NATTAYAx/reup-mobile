@@ -125,6 +125,10 @@ class AddTaskActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Before any view exists: everything below reads its colours out of
+        // Ui, and a screen that repaints into a different theme a moment
+        // after opening is worse than one with no choice at all.
+        Ui.load(this)
         uid = intent.getStringExtra(EXTRA_UID)
         title = if (uid == null) "เพิ่มงาน" else "แก้ไขงาน"
 
@@ -136,9 +140,7 @@ class AddTaskActivity : Activity() {
         typeRow = LinearLayout(this)
         typeRow.orientation = LinearLayout.VERTICAL
         for ((value, text) in TYPES) {
-            val b = Button(this)
-            b.text = text
-            b.setOnClickListener { pickType(value) }
+            val b = Ui.chip(this, text) { pickType(value) }
             b.tag = value
             typeChips.add(b)
             typeRow.addView(b, rowParams())
@@ -147,11 +149,10 @@ class AddTaskActivity : Activity() {
         dayRow = LinearLayout(this)
         dayRow.orientation = LinearLayout.HORIZONTAL
         for (i in DAYS.indices) {
-            val b = Button(this)
-            b.text = DAYS[i]
-            b.setOnClickListener { pickDay(i) }
+            val b = Ui.chip(this, DAYS[i]) { pickDay(i) }
             dayChips.add(b)
-            dayRow.addView(b, chipParams())
+            // Seven across a phone, so the gap is smaller than elsewhere.
+            dayRow.addView(b, Ui.cell(this, i == 0, 4f))
         }
 
         intervalRow = LinearLayout(this)
@@ -166,30 +167,26 @@ class AddTaskActivity : Activity() {
 
         flagRow = LinearLayout(this)
         flagRow.orientation = LinearLayout.HORIZONTAL
-        val star = Button(this)
-        star.setOnClickListener { priority = !priority; armed = false; render() }
-        val fire = Button(this)
-        fire.setOnClickListener { urgent = !urgent; armed = false; render() }
+        val star = Ui.chip(this, "") { priority = !priority; armed = false; render() }
+        val fire = Ui.chip(this, "") { urgent = !urgent; armed = false; render() }
         flagChips.add(star)
         flagChips.add(fire)
-        flagRow.addView(star, chipParams())
-        flagRow.addView(fire, chipParams())
+        flagRow.addView(star, Ui.cell(this, true))
+        flagRow.addView(fire, Ui.cell(this))
 
-        saveButton = Button(this)
-        saveButton.text = "บันทึก"
-        saveButton.setOnClickListener { save() }
+        saveButton = Ui.primary(this, "บันทึก") { save() }
+        // Outlined rather than filled. A red slab is the loudest thing on any
+        // screen it is on, and this is never why this screen was opened.
+        deleteButton = Ui.danger(this, "ลบงานนี้") { remove() }
 
-        deleteButton = Button(this)
-        deleteButton.setOnClickListener { remove() }
+        status = Ui.status(this)
 
-        status = TextView(this)
-        status.setTextColor(Color.parseColor("#E8E8EA"))
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-        status.typeface = Typeface.MONOSPACE
-
-        val column = LinearLayout(this)
-        column.orientation = LinearLayout.VERTICAL
-        column.setPadding(48, 48, 48, 64)
+        val screen = Ui.sticky(this)
+        val column = screen.column
+        column.addView(
+            Ui.header(this, if (uid == null) "เพิ่มงาน" else "แก้ไขงาน"),
+            Ui.row(this, 0f),
+        )
         column.addView(nameBox, rowParams())
         column.addView(label("กลับมาเมื่อไหร่"), rowParams())
         column.addView(typeRow, rowParams())
@@ -202,16 +199,14 @@ class AddTaskActivity : Activity() {
         column.addView(dateRow, rowParams())
         column.addView(label("ทำเครื่องหมาย"), rowParams())
         column.addView(flagRow, rowParams())
-        column.addView(saveButton, rowParams())
-        // Only when there is something to delete, and below the save button:
-        // the thing being reached for on this screen is almost always save.
-        if (uid != null) column.addView(deleteButton, rowParams())
         column.addView(status, rowParams())
+        // Only when there is something to delete, and nowhere near the save
+        // button: the thing being reached for on this screen is almost always
+        // save, and the bar at the bottom is where a thumb lands by itself.
+        if (uid != null) column.addView(deleteButton, Ui.row(this, 32f))
 
-        val scroll = ScrollView(this)
-        scroll.setBackgroundColor(Color.parseColor("#0F0F12"))
-        scroll.addView(column)
-        setContentView(scroll)
+        screen.bar.addView(saveButton, Ui.cell(this, true))
+        setContentView(screen.root)
 
         render()
         uid?.let { load(it) }
@@ -290,17 +285,12 @@ class AddTaskActivity : Activity() {
      * it in and wondering why nothing happened.
      */
     private fun render() {
-        for (b in typeChips) {
-            val mine = b.tag == type
-            b.alpha = if (mine) 1f else 0.55f
-            b.typeface = if (mine) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        }
-        for (i in dayChips.indices) {
-            dayChips[i].alpha = if (i == day) 1f else 0.55f
-            dayChips[i].typeface = if (i == day) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        }
+        for (b in typeChips) Ui.select(this, b, b.tag == type)
+        for (i in dayChips.indices) Ui.select(this, dayChips[i], i == day)
         flagChips[0].text = if (priority) "★ สำคัญ" else "☆ สำคัญ"
         flagChips[1].text = if (urgent) "🔥 ด่วน" else "ด่วน"
+        Ui.select(this, flagChips[0], priority)
+        Ui.select(this, flagChips[1], urgent)
 
         val weekly = type == "weekly" || type == "biweekly"
         dayRow.visibility = if (weekly) LinearLayout.VISIBLE else LinearLayout.GONE
@@ -470,44 +460,24 @@ class AddTaskActivity : Activity() {
         else -> code
     }
 
-    private fun field(hint: String, type: Int): EditText {
-        val e = EditText(this)
-        e.hint = hint
-        e.inputType = InputType.TYPE_CLASS_TEXT or type
-        e.setTextColor(Color.parseColor("#E8E8EA"))
-        e.setHintTextColor(Color.parseColor("#6B6B72"))
-        e.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        return e
-    }
+    // ─── looks ──────────────────────────────────────────────────────────────
+    //
+    // These four were a private copy of a design, in every screen, in raw
+    // pixels and hand-picked greys. What is left of them is the one decision
+    // that really is local: which keyboard this particular box wants.
 
-    private fun label(text: String): TextView {
-        val t = TextView(this)
-        t.text = text
-        t.setTextColor(Color.parseColor("#E8E8EA"))
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        t.typeface = Typeface.DEFAULT_BOLD
-        return t
-    }
+    private fun field(hint: String, type: Int): EditText =
+        Ui.field(this, hint, InputType.TYPE_CLASS_TEXT or type)
 
-    private fun note(text: String): TextView {
-        val t = TextView(this)
-        t.text = text
-        t.setTextColor(Color.parseColor("#8A8A92"))
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        return t
-    }
+    private fun label(text: String): TextView = Ui.fieldLabel(this, text)
 
-    private fun rowParams(): LinearLayout.LayoutParams {
-        val p = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        )
-        p.topMargin = 24
-        return p
-    }
+    private fun note(text: String): TextView = Ui.note(this, text)
 
-    private fun chipParams(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    // topMargin was 24 PIXELS, which on this phone is about nine points and on
+    // a cheap one is twenty-four. Same code, two layouts, neither chosen.
+    private fun rowParams(): LinearLayout.LayoutParams = Ui.row(this, 14f)
+
+    private fun chipParams(): LinearLayout.LayoutParams = Ui.cell(this)
 
     companion object {
         /**

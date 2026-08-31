@@ -13,13 +13,26 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
-import android.view.ViewGroup
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import app.reup.core.Alarm
+import app.reup.core.HomeRow
+import app.reup.core.HomeSection
 import app.reup.core.QuietHours
 import app.reup.core.ScheduledTask
+import app.reup.core.SetupWarning
+import app.reup.core.THEMES
+import app.reup.core.clockOf
+import app.reup.core.headerDate
+import app.reup.core.homeOrder
+import app.reup.core.homeSections
 import app.reup.core.horizon
+import app.reup.core.remaining
+import app.reup.core.rowClock
+import app.reup.core.rowNote
+import app.reup.core.setupWarnings
 import app.reup.sync.isDoneNow
 import app.reup.sync.isoMillis
 import kotlinx.coroutines.CoroutineScope
@@ -31,66 +44,87 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Duration
 
 /**
- * Phase 2b. The queue is real now - these alarms fire with the app closed.
+ * The screen this app is opened for.
  *
- * The screen has three jobs: ask for the one runtime permission, show what is
- * actually scheduled, and say plainly when something in the system settings is
- * going to stop the alarms arriving. That third one is the important one. The
- * commonest failure on this hardware is not a bug in the app; it is the phone
- * deciding on its own that a rarely-used app should stop waking up, with no
- * notice to anyone.
+ * ─── WHAT THE PHONE SHOWED, AND WHAT IT SAID ────────────────────────────────
  *
- * WHAT CHANGED IN THIS ROUND. The list is read from the database rather than
- * from Samples.kt, which is deleted. That makes an empty list possible for the
- * first time, and an empty list looks exactly like a broken one from here — so
- * the screen says which it is. "ยังไม่มีงานในฐานข้อมูล" is an answer; a queue
- * of zero with no explanation is a bug report waiting to be filed against
- * nothing.
+ * The first version of this screen was a monospace readout. The second was one
+ * list, which was right, and it still looked wrong on the phone for three
+ * reasons that only a photograph of a real screen could show.
  *
- * A note on style: the string building below is deliberately plain. An earlier
- * version nested string literals and lambdas inside templates - all legal
- * Kotlin, all fine until one character got mangled in transit, at which point
- * an unterminated string swallowed the rest of the file and the compiler
- * reported the error two hundred lines away from the actual mistake. Values are
- * computed into locals first now. Slightly longer, far easier to debug.
+ * The title sat inside the status bar and the buttons sat inside the navigation
+ * bar, because the app had never asked where those were. That is fixed one
+ * level down, in Ui.sticky.
+ *
+ * Nine rows were nine separate floating panels. Nine panels stacked with air
+ * between them is not a list; it is nine things that happen to be in a column.
+ *
+ * And it repeated itself. Four daily tasks that reset at midnight all get
+ * pushed to 08:00 by quiet hours, so four rows read exactly
+ * "พรุ่งนี้ 08:00 · อีก 23 ชม. 10 นาที · เลื่อนจากรอบเงียบ" — the same sentence,
+ * four times, at full width. Every word true, almost none of it information.
+ *
+ * ─── THE SHAPE NOW ──────────────────────────────────────────────────────────
+ *
+ *   วันนี้                                       ← the day, said once
+ *   ┌───────────────────────────────────────┐
+ *   │ ▍○  Blood pressure meds        09:00  │  ← the lead: violet rule
+ *   │     อีก 10 นาที                        │
+ *   │ ──────────────────────────────────────│
+ *   │   ○  My Hero Ultra Rumble      10:00  │
+ *   └───────────────────────────────────────┘
+ *
+ *   พรุ่งนี้                    เลื่อนจากรอบเงียบ  ← hoisted, because all of them
+ *   ┌───────────────────────────────────────┐
+ *   │   ○  Honkai Star Rail Daily    08:00  │
+ *   │   ○  FGO (JP server)           08:00  │
+ *   └───────────────────────────────────────┘
+ *
+ * The clock in a column of its own is what did most of the work: four
+ * identical times stop being four sentences and become one column the eye
+ * reads once. The rules for what a section says are in Face.kt, with tests,
+ * because "when every row shares a reason, the reason moves to the heading" is
+ * a decision and not a layout.
+ *
+ * ─── WHAT IS SAID ONLY WHILE IT IS TRUE ─────────────────────────────────────
+ *
+ * Nothing about permissions appears while nothing is wrong. A checklist that
+ * reads all-clear every day is a checklist nobody reads on the day it changes.
+ * That rule is from the wellbeing document rather than from any style guide.
+ *
+ * ─── AND THE DIAGNOSTICS ARE STILL HERE ─────────────────────────────────────
+ *
+ * Behind one line at the bottom. They are what the eight o'clock reminder that
+ * never arrived was chased down with, and deleting them to make the screen
+ * prettier would be trading a real tool for a nice photograph.
  */
 class MainActivity : Activity() {
 
-    private lateinit var status: TextView
     private val ticker = Handler(Looper.getMainLooper())
-
-    // Counted in ticks rather than kept as a clock, so that a phone asleep for
-    // six hours does not come back and fire immediately: the ticker is stopped
-    // while paused, so the count is time spent with this screen actually in
-    // front of somebody.
-    private var ticksSinceSync = 0
-    private var syncing = false
-
-    /**
-     * Seconds since anything actually moved.
-     *
-     * A fixed interval has to pick one number for two different situations. Two
-     * devices being poked at right now want the next question asked in a couple
-     * of seconds; a screen left open on a desk while nothing happens for twenty
-     * minutes wants to be left alone. Fifteen seconds was the compromise, and a
-     * compromise is what makes a change that lands on the second after a check
-     * wait out the whole gap.
-     *
-     * So the gap follows what is happening instead. Something moved in the last
-     * minute means somebody is doing something, and the next question is worth
-     * asking almost immediately.
-     */
-    private var quietTicks = 0
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // Read once per resume and redrawn every second from here. The clock moves
-    // far more often than the rows do, and re-reading the database sixty times
-    // a minute to find that out would be a strange way to save nothing.
+    // ── the screen ──────────────────────────────────────────────────────────
+    private lateinit var dateLine: TextView
+    private lateinit var warnBox: LinearLayout
+    private lateinit var emptyCard: LinearLayout
+    private lateinit var emptyText: TextView
+    private lateinit var emptyNote: TextView
+    private lateinit var listBox: LinearLayout
+    private lateinit var syncLine: TextView
+    private lateinit var themeBox: LinearLayout
+    private lateinit var detailsToggle: Button
+    private lateinit var detailsCard: LinearLayout
+    private lateinit var status: TextView
+
+    /** Folded away by default. Opened deliberately, on the day it is needed. */
+    private var detailsOpen = false
+
+    // ── what is being drawn ─────────────────────────────────────────────────
     private var tasks: List<ScheduledTask> = emptyList()
     private var labels: Map<String, String> = emptyMap()
+
     // Nullable because "the person turned quiet hours off" is a different answer
     // from "this phone has not been told yet", and only Repo resolves the two.
     private var quiet: QuietHours? = Repo.DEFAULT_QUIET
@@ -98,52 +132,129 @@ class MainActivity : Activity() {
     private var loaded = false
     private var loadError: String? = null
 
-    // Rebuilt when the rows are read, never on the tick. A button that is
-    // replaced once a second is a button that cannot be pressed.
-    private lateinit var ticks: LinearLayout
+    /** One per task id, in the order they are drawn. */
+    private val rows = LinkedHashMap<String, Ui.Row>()
+
+    /**
+     * What the sections looked like last time views were built.
+     *
+     * Rebuilding nine rows sixty times a minute to change two words in them
+     * would be silly, and never rebuilding them means the list is wrong the
+     * moment midnight turns พรุ่งนี้ into วันนี้. So the shape gets a signature,
+     * and views are rebuilt when it changes rather than on a timer.
+     */
+    private var shape = ""
+
+    private var alarms: List<Alarm> = emptyList()
+    private var alarmsAt: Instant = Instant.fromEpochMilliseconds(0)
+
+    private var ticksSinceSync = 0
+    private var syncing = false
+
+    /** Seconds since anything actually moved. See [syncEveryTicks]. */
+    private var quietTicks = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // First, before a single view exists. Everything below reads colours
+        // out of Ui, and a screen that starts in one theme and repaints into
+        // another a moment later is worse than one with no choice at all.
+        Ui.load(this)
 
         Notifications.ensureChannel(this)
         requestNotificationPermission()
 
-        // Monospace, because it is read as columns: times under times, names
-        // under names. Everything else on this screen is prose and is not.
+        val screen = Ui.sticky(this)
+        val column = screen.column
+
+        // ── who and when ────────────────────────────────────────────────────
+        val head = Ui.header(this, "Reup", "")
+        dateLine = head.getChildAt(1) as TextView
+        column.addView(head, Ui.row(this, 0f))
+
+        // ── anything the phone is doing to itself ───────────────────────────
+        warnBox = Ui.column(this)
+        column.addView(warnBox, Ui.row(this, 0f))
+
+        // ── the list, or the reason there is no list ────────────────────────
+        emptyCard = Ui.card(this)
+        emptyText = Ui.body(this, "")
+        emptyNote = Ui.note(this, "")
+        emptyCard.addView(emptyText)
+        emptyCard.addView(emptyNote, Ui.row(this, 6f))
+        column.addView(emptyCard, Ui.row(this, 20f))
+
+        listBox = Ui.column(this)
+        column.addView(listBox, Ui.row(this, 20f))
+
+        // ── everything below here is opened once, or never ──────────────────
+        column.addView(Ui.divider(this), Ui.dividerRow(this))
+        column.addView(Ui.label(this, "ตั้งค่า"), Ui.row(this, 16f))
+
+        val settings = Ui.listCard(this)
+        settings.addView(
+            Ui.navRow(this, "ซิงก์กับคอม", "โฟลเดอร์ รหัสจับคู่ และปุ่มซิงก์") {
+                startActivity(Intent(this, SyncActivity::class.java))
+            },
+        )
+        settings.addView(Ui.hairline(this), Ui.hairlineRow(this))
+        settings.addView(
+            Ui.navRow(this, "อ่านสลิป", "ดูว่าตัวอ่านเห็นอะไรบนสลิปจริง") {
+                startActivity(Intent(this, ScanSlipActivity::class.java))
+            },
+        )
+        column.addView(settings, Ui.row(this, 10f))
+
+        // The one line of the automatic sync worth having on this screen.
+        // Success is the absence of news, which on its own looks identical to
+        // "this has not run in ten minutes" and is a different problem.
+        syncLine = Ui.note(this, Repo.lastQuiet)
+        syncLine.setTextColor(Ui.FAINT)
+        column.addView(syncLine, Ui.row(this, 10f))
+
+        // ── the colours ─────────────────────────────────────────────────────
+        column.addView(Ui.label(this, "หน้าตา"), Ui.row(this, 24f))
+        themeBox = Ui.column(this)
+        column.addView(themeBox, Ui.row(this, 10f))
+        drawThemes()
+
+        // ── the panel this screen used to be ────────────────────────────────
+        detailsToggle = Ui.quiet(this, DETAILS_SHUT) { toggleDetails() }
+        detailsToggle.gravity =
+            android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
+        detailsToggle.setPadding(0, Ui.dp(this, 8f), 0, Ui.dp(this, 8f))
+        column.addView(detailsToggle, Ui.row(this, 20f))
+
         status = Ui.mono(this)
+        status.setTextIsSelectable(true)
+        detailsCard = Ui.card(this)
+        detailsCard.addView(status)
+        detailsCard.addView(
+            Ui.secondary(this, "ทดสอบ: แจ้งเตือนในอีก 60 วินาที") {
+                Scheduler.fireTestIn(this, 60)
+                Toast.makeText(this, "ตั้งแล้ว ปิดแอปแล้วล็อกจอรอได้เลย", Toast.LENGTH_LONG).show()
+            },
+            Ui.row(this, 16f),
+        )
+        detailsCard.addView(
+            Ui.secondary(this, "เปิดหน้าตั้งค่าแอปในระบบ") { openAppSettings() },
+            Ui.row(this, 8f),
+        )
+        Ui.show(detailsCard, false)
+        column.addView(detailsCard, Ui.row(this, 8f))
 
-        val testButton = Ui.secondary(this, "ทดสอบ: แจ้งเตือนในอีก 60 วินาที") {
-            Scheduler.fireTestIn(this, 60)
-            Toast.makeText(this, "ตั้งแล้ว ปิดแอปแล้วล็อกจอรอได้เลย", Toast.LENGTH_LONG).show()
+        // ── the two things done most days ───────────────────────────────────
+        //
+        // Ticking is the third, and it is not here: it is the list itself.
+        val addButton = Ui.secondary(this, "เพิ่มงาน") {
+            startActivity(Intent(this, AddTaskActivity::class.java))
         }
-
-        val batteryButton = Ui.secondary(this, "เปิดหน้าตั้งค่าแบตเตอรี่ของแอป") {
-            openBatterySettings()
-        }
-
-        // Only built when it is needed. A permanent button for a permission
-        // that is already granted is a button that teaches people to ignore
-        // buttons, and this screen has two of those already.
-        val exactButton = Ui.secondary(this, "อนุญาตให้เตือนตรงเวลา") { openExactAlarmSettings() }
-
-        // The only way into the sync screen. Deliberately a second screen and
-        // not a section of this one: this screen is a live readout that redraws
-        // every second, and text boxes that lose what is being typed into them
-        // once a second are not text boxes.
-        val syncButton = Ui.secondary(this, "ตั้งค่าซิงก์กับคอม") {
-            startActivity(Intent(this, SyncActivity::class.java))
-        }
-
-        // The money going out is spent standing up, and the machine it was
-        // being recorded on is at a desk. That gap is why the numbers in the
-        // app have never quite been the numbers.
-        val spendButton = Ui.primary(this, "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e40\u0e07\u0e34\u0e19") {
+        // Money going out is spent standing up, and the machine it was being
+        // recorded on is at a desk. That gap is why the numbers in the app have
+        // never quite been the numbers.
+        val spendButton = Ui.primary(this, "บันทึกเงิน") {
             startActivity(Intent(this, AddMoneyActivity::class.java))
         }
-        // The screen has a switch at the top, so this is a shortcut rather
-        // than the only way in. Spending is the common case by a long way
-        // and gets the tap; a payment arriving is rare enough to be worth a
-        // press and hold.
         spendButton.setOnLongClickListener {
             startActivity(
                 Intent(this, AddMoneyActivity::class.java)
@@ -151,97 +262,35 @@ class MainActivity : Activity() {
             )
             true
         }
+        screen.bar.addView(addButton, Ui.cell(this, true))
+        screen.bar.addView(spendButton, Ui.cell(this))
 
-        // Reading a slip, which for now means looking at what a recogniser made
-        // of one. It writes nothing yet and is here rather than buried in a
-        // menu because the whole point of it is to be run against a real slip
-        // early — see ScanSlipActivity.
-        val scanButton = Ui.secondary(this, "\u0e2d\u0e48\u0e32\u0e19\u0e2a\u0e25\u0e34\u0e1b") {
-            startActivity(Intent(this, ScanSlipActivity::class.java))
-        }
-
-        val addButton = Ui.primary(this, "\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e07\u0e32\u0e19") {
-            startActivity(Intent(this, AddTaskActivity::class.java))
-        }
-
-        ticks = LinearLayout(this)
-        ticks.orientation = LinearLayout.VERTICAL
-
-        // Three groups, in the order the day uses them.
-        //
-        // What is due, then what is done about it, then the setup buttons that
-        // are pressed once ever. Before this they were ten identical slabs, and
-        // a screen where the battery-settings button is drawn as loudly as
-        // ticking something off is a screen that has not been asked what it is
-        // for.
-        val screen = Ui.screen(this)
-        val column = screen.column
-
-        val readout = Ui.card(this)
-        readout.addView(Ui.label(this, "\u0e04\u0e34\u0e27"))
-        readout.addView(status, Ui.row(this, 8f))
-        column.addView(readout, Ui.row(this, 0f))
-
-        column.addView(ticks, Ui.row(this, 4f))
-
-        column.addView(addButton, Ui.row(this, 20f))
-        column.addView(spendButton, Ui.row(this))
-
-        // Everything below the line is setup. The permission button is only
-        // built when it is missing, for the reason written where it is created.
-        column.addView(Ui.divider(this), Ui.dividerRow(this))
-        column.addView(Ui.label(this, "\u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32"), Ui.row(this, 8f))
-        column.addView(syncButton, Ui.row(this))
-        column.addView(scanButton, Ui.row(this))
-        column.addView(testButton, Ui.row(this))
-        column.addView(batteryButton, Ui.row(this))
-        if (!Scheduler.exactAllowed(this)) column.addView(exactButton, Ui.row(this))
-
-        setContentView(screen.scroll)
+        setContentView(screen.root)
     }
 
     override fun onResume() {
         super.onResume()
-        // Opening the app is one of the four moments the queue is rebuilt, and
-        // the only one a person can trigger deliberately. It is also what
-        // recovers from a timezone change, since those are unreliable to
-        // observe and someone who has just landed opens their phone anyway.
-        //
-        // Reading for the screen comes after rescheduling rather than before,
-        // so that what is drawn is what was just handed to the OS and not the
-        // state a moment earlier.
         scope.launch {
             try {
                 Scheduler.reschedule(this@MainActivity)
-                val repo = Repo.open(this@MainActivity)
-                tasks = repo.tasks()
-                labels = repo.labels()
-                completions = repo.completions()
-                quiet = Repo.quietHours(this@MainActivity)
+                readEverything()
                 loadError = null
             } catch (e: Exception) {
-                // Shown rather than swallowed. A screen that silently keeps the
-                // last good list is a screen that lies for as long as the fault
-                // lasts.
                 loadError = e.message ?: e.toString()
             }
             loaded = true
             quietTicks = 0
-            drawTicks()
+            redraw()
 
-            // Then, and only then, ask the folder. Drawn first because the
-            // local answer is instant and correct as of the last sync, and a
-            // screen that waits for the network before showing anything is a
-            // screen that is blank on a train.
             if (Repo.syncQuietly(this@MainActivity)) {
                 Scheduler.reschedule(this@MainActivity)
-                val repo = Repo.open(this@MainActivity)
-                tasks = repo.tasks()
-                labels = repo.labels()
-                completions = repo.completions()
-                drawTicks()
+                readEverything()
+                redraw()
             }
         }
+        // Settings can only have changed while this screen was away, which is
+        // exactly what coming back means.
+        drawWarnings()
         tick()
     }
 
@@ -255,35 +304,19 @@ class MainActivity : Activity() {
         scope.cancel()
     }
 
+    private suspend fun readEverything() {
+        val repo = Repo.open(this@MainActivity)
+        tasks = repo.tasks()
+        labels = repo.labels()
+        completions = repo.completions()
+        quiet = Repo.quietHours(this@MainActivity)
+        alarmsAt = Instant.fromEpochMilliseconds(0)
+    }
+
     private fun tick() {
-        // The automatic line is appended rather than woven in, so that render()
-        // stays a description of the data and this stays a description of the
-        // machinery. Two different questions, and only one of them is about
-        // tasks.
-        // Said once, plainly, and only while it is true. A reminder that may be
-        // twenty minutes late is still worth having; not knowing that it may be
-        // is what turns a late buzz into a broken app.
-        val late = if (Scheduler.exactAllowed(this)) "" else
-            "\n⚠ การเตือนอาจสายได้ถึงครึ่งชั่วโมง กดปุ่มล่างสุดเพื่ออนุญาต"
-        status.text = render() + late + "\n" + Repo.lastQuiet
+        refresh()
         ticker.postDelayed({ tick() }, 1000L)
 
-        // ── asking the folder while somebody is looking ───────────────────────
-        //
-        // Syncing only on resume left one gap that reads exactly like a bug: the
-        // app is already open, something changes on the desktop, and this screen
-        // sits there being wrong until it is backgrounded and brought forward
-        // again. Nobody thinks to do that, and they should not have to.
-        //
-        // This is not background work and does not break the rule against it.
-        // The loop it rides on only exists while this Activity is resumed, is
-        // torn down in onPause with everything else on the ticker, and the
-        // screen is on for all of it. The battery cost is one request a minute
-        // while a person is actually reading the list.
-        //
-        // A minute rather than every tick, because the clock moves far more
-        // often than the rows do — the same reason the rows are read once per
-        // resume rather than sixty times a minute.
         quietTicks++
         if (++ticksSinceSync < syncEveryTicks()) return
         ticksSinceSync = 0
@@ -292,16 +325,10 @@ class MainActivity : Activity() {
         scope.launch {
             try {
                 if (Repo.syncQuietly(this@MainActivity)) {
-                    // Something moved, so stay quick: a change rarely arrives
-                    // alone, and the person watching this screen is the reason
-                    // it did.
                     quietTicks = 0
                     Scheduler.reschedule(this@MainActivity)
-                    val repo = Repo.open(this@MainActivity)
-                    tasks = repo.tasks()
-                    labels = repo.labels()
-                    completions = repo.completions()
-                    drawTicks()
+                    readEverything()
+                    redraw()
                 }
             } finally {
                 syncing = false
@@ -309,67 +336,202 @@ class MainActivity : Activity() {
         }
     }
 
-    /**
-     * One button per task, in the order the queue rings them.
-     *
-     * WHY THE ORDER COMES FROM THE QUEUE AND NOT FROM THE TABLE
-     *
-     * The list above is what is about to happen, sorted by when. A person who
-     * has just read it and reaches for a button is reaching for the thing at
-     * the top of it. Sorting these by name or by row id would mean the two
-     * lists disagree about which task is which, and the only way to notice
-     * would be to have ticked the wrong one.
-     *
-     * Tasks with nothing scheduled come last rather than being dropped. A task
-     * that is already ticked has no upcoming alarm to sort it by, and hiding
-     * the button that undoes a tick is the one way to make a mis-tap permanent.
-     */
-    private fun drawTicks() {
-        ticks.removeAllViews()
-        if (tasks.isEmpty()) return
+    /** Three seconds while things are happening, a minute when they are not. */
+    private fun syncEveryTicks(): Int = when {
+        quietTicks < 60 -> 3
+        quietTicks < 300 -> 15
+        else -> 60
+    }
 
+    /** Force the queue and the views to be worked out again from scratch. */
+    private fun redraw() {
+        alarmsAt = Instant.fromEpochMilliseconds(0)
+        shape = ""
+        refresh()
+    }
+
+    // ─── the list ───────────────────────────────────────────────────────────
+
+    /**
+     * Everything that changes as the clock moves, and nothing that does not.
+     *
+     * Runs once a second. Text is compared before it is set, because setting a
+     * TextView to the string it already holds still asks for a layout pass.
+     */
+    private fun refresh() {
         val now = Clock.System.now()
         val zone = TimeZone.currentSystemDefault()
-        val queued = horizon(tasks, now, zone, 8, quiet).map { it.taskId }
-        val nowIso = isoMillis(now.toEpochMilliseconds())
 
-        val ordered = tasks.sortedBy { t ->
-            val at = queued.indexOf(t.id)
-            if (at < 0) Int.MAX_VALUE else at
+        say(dateLine, headerDate(now, zone))
+        say(syncLine, Repo.lastQuiet)
+
+        // The queue is not recomputed every second. The list says "อีก 3 ชม."
+        // and that answer holds for the next three thousand seconds. It is
+        // redone every half minute, and immediately when the soonest alarm has
+        // passed — the only moment the answer can change on its own.
+        val stale = (now - alarmsAt).inWholeSeconds >= 30 ||
+                alarms.firstOrNull()?.let { now >= it.fireAt } == true
+        if (stale) {
+            alarms = horizon(tasks, now, zone, 8, quiet)
+            alarmsAt = now
         }
 
-        for (task in ordered) {
-            val done = isDoneNow(completions[task.id], nowIso)
-            val label = (if (done) "✓  " else "☐  ") + (labels[task.id] ?: task.id)
-            // A task already done reads as done rather than as another thing to
-            // press: same button, quieter ink.
-            val button = Ui.secondary(this, label) { onTick(task) }
-            button.gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
-            if (done) button.setTextColor(Ui.DIM)
-            // Long press to edit. A tap is the thing this list is for and has
-            // to stay a tap; opening a form by accident when reaching to tick
-            // something off is worse than editing being slightly hidden.
-            button.setOnLongClickListener {
-                startActivity(
-                    Intent(this, AddTaskActivity::class.java)
-                        .putExtra(AddTaskActivity.EXTRA_UID, task.id),
-                )
-                true
+        val sections = sectionsNow(now, zone)
+        val signature = sections.joinToString("|") { s ->
+            s.title + "/" + s.note + "/" + s.rows.joinToString(",") { it.id }
+        }
+        if (signature != shape) {
+            build(sections)
+            shape = signature
+        }
+
+        var lead: String? = null
+        for (s in sections) {
+            for (r in s.rows) {
+                if (!r.done) { lead = r.id; break }
             }
-            ticks.addView(button, Ui.row(this, 8f))
+            if (lead != null) break
         }
+
+        for (s in sections) {
+            val hoisted = s.note != null
+            for (r in s.rows) {
+                val view = rows[r.id] ?: continue
+                val note = if (paused(r.id, now)) "พักอยู่" else rowNote(r, now, hoisted)
+                Ui.dressRow(this, view, r.done, r.id == lead, rowClock(r, zone), note)
+            }
+        }
+
+        if (detailsOpen) status.text = render(now, zone)
     }
 
     /**
-     * Ticking is a database write, so the button is disabled until it lands.
+     * The list as data, before anything is drawn.
      *
-     * Not for looks. Two taps land as two writes, and the second one reads a
+     * The order comes from [homeOrder] and the grouping from [homeSections],
+     * both of which live in Face.kt with their tests. Nothing here decides
+     * anything; it reads three maps and hands over four fields per task.
+     */
+    private fun sectionsNow(now: Instant, zone: TimeZone): List<HomeSection> {
+        val nowIso = isoMillis(now.toEpochMilliseconds())
+        val done = tasks.map { it.id }.filter { isDoneNow(completions[it], nowIso) }.toSet()
+        val order = homeOrder(tasks.map { it.id }, alarms.map { it.taskId }, done)
+
+        val soonest = HashMap<String, Alarm>()
+        for (a in alarms) if (!soonest.containsKey(a.taskId)) soonest[a.taskId] = a
+
+        val out = ArrayList<HomeRow>()
+        for (id in order) {
+            val alarm = soonest[id]
+            out.add(
+                HomeRow(
+                    id = id,
+                    name = labels[id] ?: id,
+                    fireAt = alarm?.fireAt,
+                    shifted = alarm?.shiftedOutOfQuiet ?: false,
+                    done = done.contains(id),
+                ),
+            )
+        }
+        return homeSections(out, now, zone)
+    }
+
+    /**
+     * One heading and one panel per section, one row per task.
+     *
+     * Rebuilt only when the sections themselves changed — a name edited, a task
+     * ticked, or midnight moving a group from พรุ่งนี้ into วันนี้.
+     */
+    private fun build(sections: List<HomeSection>) {
+        listBox.removeAllViews()
+        rows.clear()
+
+        for ((index, s) in sections.withIndex()) {
+            listBox.addView(
+                Ui.sectionHead(this, s.title, s.note),
+                Ui.row(this, if (index == 0) 0f else 20f),
+            )
+            val card = Ui.listCard(this)
+            for ((position, r) in s.rows.withIndex()) {
+                if (position > 0) card.addView(Ui.hairline(this), Ui.hairlineRow(this))
+                val task = tasks.firstOrNull { it.id == r.id } ?: continue
+                val view = Ui.taskRow(
+                    this,
+                    onClick = { onTick(task) },
+                    // A tap is what this list is for and has to stay a tap.
+                    // Opening a form by accident while reaching to tick
+                    // something off is worse than editing being slightly hidden.
+                    onLong = {
+                        startActivity(
+                            Intent(this, AddTaskActivity::class.java)
+                                .putExtra(AddTaskActivity.EXTRA_UID, r.id),
+                        )
+                    },
+                )
+                view.name.text = r.name
+                rows[r.id] = view
+                card.addView(view.view)
+            }
+            listBox.addView(card)
+        }
+
+        drawEmpty()
+    }
+
+    /**
+     * The line that makes silence readable.
+     *
+     * An empty list has three causes that look identical from here and need
+     * different things done about them: still reading, could not read, or read
+     * fine and there is nothing in it. Saying which is the whole job.
+     */
+    private fun drawEmpty() {
+        val failure = loadError
+        val empty = tasks.isEmpty()
+        Ui.show(emptyCard, empty || failure != null)
+        Ui.show(listBox, !empty)
+        if (!empty && failure == null) return
+
+        when {
+            failure != null -> {
+                emptyText.text = "อ่านฐานข้อมูลบนเครื่องนี้ไม่ได้"
+                emptyText.setTextColor(Ui.WARN)
+                emptyNote.text = failure
+            }
+            !loaded -> {
+                emptyText.text = "กำลังอ่าน"
+                emptyText.setTextColor(Ui.TEXT)
+                emptyNote.text = ""
+            }
+            else -> {
+                emptyText.text = "ยังไม่มีงานในเครื่องนี้"
+                emptyText.setTextColor(Ui.TEXT)
+                emptyNote.text = "ตั้งค่าซิงก์กับคอมแล้วดึงลงมาก่อน " +
+                        "จนกว่าจะมีงาน การแจ้งเตือนจะเงียบ ซึ่งถูกแล้ว"
+            }
+        }
+        Ui.show(emptyNote, emptyNote.text.isNotEmpty())
+    }
+
+    private fun paused(id: String, now: Instant): Boolean {
+        val until = tasks.firstOrNull { it.id == id }?.pausedUntil ?: return false
+        return until > now
+    }
+
+    private fun say(v: TextView, text: String) {
+        if (v.text.toString() != text) v.text = text
+    }
+
+    /**
+     * Ticking is a database write, so every row is disabled until it lands.
+     *
+     * Not for looks. Two taps land as two writes, and the second reads a
      * completion the first has just made and undoes it — a double tap that
      * silently means nothing happened.
      */
     private fun onTick(task: ScheduledTask) {
         scope.launch {
-            for (i in 0 until ticks.childCount) ticks.getChildAt(i).isEnabled = false
+            for (r in rows.values) r.view.isEnabled = false
             try {
                 val until = Repo.toggleDone(
                     this@MainActivity, task, Clock.System.now(), TimeZone.currentSystemDefault(),
@@ -378,15 +540,10 @@ class MainActivity : Activity() {
                 // the alarm for a finished cycle is the one at its reset, and
                 // the reset is exactly when the tick expires.
                 Scheduler.reschedule(this@MainActivity)
-                val repo = Repo.open(this@MainActivity)
-                tasks = repo.tasks()
-                labels = repo.labels()
-                completions = repo.completions()
+                readEverything()
                 val name = labels[task.id] ?: task.id
-                // Sent straight away rather than waiting for the next time this
-                // screen is opened. Ticking is the one moment this device has
-                // news the other one wants, and the gap between having it and
-                // sending it is the gap where the desktop shows the wrong thing.
+                // Sent straight away rather than at the next opening. Ticking is
+                // the one moment this device has news the other one wants.
                 quietTicks = 0
                 Repo.syncQuietly(this@MainActivity)
                 Toast.makeText(
@@ -400,82 +557,155 @@ class MainActivity : Activity() {
                 // notification arriving again for something already done.
                 loadError = e.message ?: e.toString()
             }
-            drawTicks()
+            for (r in rows.values) r.view.isEnabled = true
+            redraw()
         }
     }
 
-    /** Three seconds while things are happening, a minute when they are not. */
-    private fun syncEveryTicks(): Int = when {
-        quietTicks < 60 -> 3
-        quietTicks < 300 -> 15
-        else -> 60
+    // ─── the colours ────────────────────────────────────────────────────────
+
+    /**
+     * Six themes, each drawn in its own palette.
+     *
+     * WHY IT IS HERE AND NOT ON A SCREEN OF ITS OWN
+     *
+     * It is six buttons pressed roughly twice in a lifetime. A whole activity
+     * for that is a manifest entry, a back stack and a title bar for something
+     * that fits under a heading.
+     *
+     * WHY THE SCREEN IS REBUILT RATHER THAN REPAINTED
+     *
+     * Colours are read once, when a view is made. Repainting would mean walking
+     * every view on every screen and knowing which of the sixteen colours each
+     * one used, which is a second copy of this file's job. recreate() throws the
+     * views away and builds them from the new palette, which is what a theme
+     * change is.
+     */
+    private fun drawThemes() {
+        themeBox.removeAllViews()
+        val current = Ui.themeId(this)
+        var strip: LinearLayout? = null
+        for ((index, p) in THEMES.withIndex()) {
+            if (index % 3 == 0) {
+                strip = Ui.strip(this)
+                themeBox.addView(strip, Ui.row(this, if (index == 0) 0f else 8f))
+            }
+            strip?.addView(
+                Ui.swatch(this, p, p.id == current) {
+                    if (p.id != current) {
+                        Ui.setTheme(this, p.id)
+                        recreate()
+                    }
+                },
+                Ui.cell(this, index % 3 == 0, 8f),
+            )
+        }
     }
 
-    private fun render(): String {
-        val now = Clock.System.now()
-        val zone = TimeZone.currentSystemDefault()
-        val alarms = horizon(tasks, now, zone, 8, quiet)
+    // ─── what the phone is doing to itself ──────────────────────────────────
 
+    /**
+     * A line for each thing that will stop a reminder arriving, and the button
+     * that fixes it. Nothing at all when there is nothing to say.
+     */
+    private fun drawWarnings() {
         val nm = getSystemService(NotificationManager::class.java)
         val pm = getSystemService(PowerManager::class.java)
+        val channel = nm.getNotificationChannel(Notifications.CHANNEL_RESETS)
+
+        val warnings = setupWarnings(
+            notificationsOn = nm.areNotificationsEnabled(),
+            channelOn = channel != null &&
+                    channel.importance != NotificationManager.IMPORTANCE_NONE,
+            batteryExempt = pm.isIgnoringBatteryOptimizations(packageName),
+            exactAllowed = Scheduler.exactAllowed(this),
+        )
+
+        warnBox.removeAllViews()
+        Ui.show(warnBox, warnings.isNotEmpty())
+        for (w in warnings) {
+            val view = when (w) {
+                SetupWarning.NOTIFICATIONS_OFF -> Ui.banner(
+                    this,
+                    "แอปโพสต์แจ้งเตือนไม่ได้ ปิดอยู่ในตั้งค่าระบบ",
+                    Ui.DANGER,
+                    "เปิด",
+                ) { openNotificationSettings() }
+
+                SetupWarning.CHANNEL_OFF -> Ui.banner(
+                    this,
+                    "ช่องรอบรีเซ็ตถูกปิดเสียงไว้ การเตือนจะไม่ขึ้น",
+                    Ui.DANGER,
+                    "เปิด",
+                ) { openNotificationSettings() }
+
+                // Not a warning for its own sake. On this vendor's software an
+                // app left alone for a few days is put to sleep and its alarms
+                // stop, and nothing tells the person that happened.
+                SetupWarning.BATTERY_MANAGED -> Ui.banner(
+                    this,
+                    "ซัมซุงอาจพักแอปเองหลังไม่ได้เปิดไม่กี่วัน แล้วการเตือนจะเงียบโดยไม่มีอะไรบอก",
+                    Ui.WARN,
+                    "แก้",
+                ) { openBatterySettings() }
+
+                SetupWarning.INEXACT_ALARMS -> Ui.banner(
+                    this,
+                    "การเตือนอาจสายได้ถึงครึ่งชั่วโมง",
+                    Ui.WARN,
+                    "อนุญาต",
+                ) { openExactAlarmSettings() }
+            }
+            warnBox.addView(view, Ui.row(this, 12f))
+        }
+    }
+
+    // ─── the panel ──────────────────────────────────────────────────────────
+
+    private fun toggleDetails() {
+        detailsOpen = !detailsOpen
+        Ui.show(detailsCard, detailsOpen)
+        detailsToggle.text = if (detailsOpen) DETAILS_OPEN else DETAILS_SHUT
+        if (detailsOpen) status.text = render(Clock.System.now(), TimeZone.currentSystemDefault())
+    }
+
+    /**
+     * Everything the old screen said, kept whole.
+     *
+     * This is the readout that found the alarm firing at ten to midnight, and
+     * it stays exact — seconds in the countdown, the timezone spelled out, all
+     * four permissions listed whether they pass or not. The list upstairs
+     * rounds to the nearest minute because that is what a person reads; this
+     * does not, because it is what a bug is chased with.
+     */
+    private fun render(now: Instant, zone: TimeZone): String {
         val am = getSystemService(AlarmManager::class.java)
+        val nm = getSystemService(NotificationManager::class.java)
+        val pm = getSystemService(PowerManager::class.java)
+        val channel = nm.getNotificationChannel(Notifications.CHANNEL_RESETS)
 
         val notificationsOn = nm.areNotificationsEnabled()
-        val batteryExempt = pm.isIgnoringBatteryOptimizations(packageName)
-        val channel = nm.getNotificationChannel(Notifications.CHANNEL_RESETS)
         val channelOn = channel != null &&
                 channel.importance != NotificationManager.IMPORTANCE_NONE
+        val batteryExempt = pm.isIgnoringBatteryOptimizations(packageName)
         val systemAlarmSet = am.nextAlarmClock != null
 
         val sb = StringBuilder()
-        sb.append("reup\n\n")
+        sb.append("theme    ").append(Ui.palette.id).append("\n")
         sb.append("zone     ").append(zone.toString()).append("\n")
         sb.append("now      ").append(stamp(now, zone)).append("\n")
         // Printed from the same value the scheduler used, so the queue below and
-        // the line above it can never disagree. "ปิดอยู่" is a real state now:
-        // it means the desktop says off, not that this phone has not heard.
+        // the line above it cannot disagree. "ปิดอยู่" is a real state: it means
+        // the desktop says off, not that this phone has not heard.
         sb.append("รอบเงียบ  ")
-            .append(quiet?.let { "${it.start} ถึง ${it.end}" } ?: "ปิดอยู่")
+            .append(quiet?.let { it.start + " ถึง " + it.end } ?: "ปิดอยู่")
             .append("\n\n")
-
-        // The line that makes silence readable. Nothing scheduled has two
-        // causes and they need different things done about them: no rows yet,
-        // or rows that nothing can be scheduled from.
-        sb.append("- ฐานข้อมูลบนเครื่องนี้ -\n")
-        val failure = loadError
-        when {
-            failure != null -> sb.append("อ่านไม่ได้ ").append(failure).append("\n")
-            !loaded -> sb.append("กำลังอ่าน\n")
-            tasks.isEmpty() -> {
-                sb.append("ยังไม่มีงาน ตั้งค่าซิงก์แล้วดึงจากคอมลงมาก่อน\n")
-                sb.append("การแจ้งเตือนจะเงียบจนกว่าจะมีงาน ซึ่งถูกแล้ว\n")
-            }
-            else -> {
-                val nowIso = isoMillis(now.toEpochMilliseconds())
-                val ticked = tasks.count { isDoneNow(completions[it.id], nowIso) }
-                sb.append("มี ").append(tasks.size).append(" งาน")
-                if (ticked > 0) sb.append(" · ติ๊กแล้ว ").append(ticked)
-                sb.append("\n")
-                // The alarm for a ticked task still stands, and that is right:
-                // it rings at the reset, which is the moment the tick expires.
-                // Said here because a queue entry for something just ticked off
-                // otherwise reads as the app having missed the tick.
-            }
-        }
-        sb.append("\n")
 
         sb.append("- สถานะที่มีผลกับการเตือน -\n")
         sb.append(mark(notificationsOn)).append(" อนุญาตแจ้งเตือน\n")
         sb.append(mark(channelOn)).append(" ช่องรอบรีเซ็ตเปิดอยู่\n")
         sb.append(mark(batteryExempt)).append(" ยกเว้นการประหยัดแบต\n")
-        if (!batteryExempt) {
-            // Not a warning for its own sake. On this vendor's software an app
-            // left alone for a few days is put to sleep and its alarms stop;
-            // the person has no way to know that happened.
-            sb.append("   ถ้าไม่ยกเว้น ซัมซุงจะพักแอปเองหลังไม่ได้เปิดไม่กี่วัน\n")
-            sb.append("   แล้วการเตือนจะเงียบไปโดยไม่มีอะไรบอก\n")
-        }
-        sb.append("\n")
+        sb.append(mark(Scheduler.exactAllowed(this))).append(" เตือนตรงเวลา\n\n")
 
         sb.append("- คิวที่ส่งให้ระบบแล้ว (").append(alarms.size).append(") -\n")
         if (alarms.isEmpty()) {
@@ -483,51 +713,31 @@ class MainActivity : Activity() {
         } else {
             for (alarm in alarms) {
                 val label = labels[alarm.taskId] ?: alarm.taskId
-                val left = remaining(alarm.fireAt - now)
                 sb.append(stamp(alarm.fireAt, zone)).append("  ").append(label).append("\n")
-                sb.append("   อีก ").append(left)
-                if (alarm.shiftedOutOfQuiet) {
-                    sb.append("  (เลื่อนจากรอบเงียบ)")
-                }
+                sb.append("   อีก ").append(remaining(now, alarm.fireAt))
+                if (alarm.shiftedOutOfQuiet) sb.append("  (เลื่อนจากรอบเงียบ)")
                 sb.append("\n")
             }
         }
         sb.append("\n")
 
-        sb.append("โหมด inexact - ระบบอาจเลื่อนได้ไม่กี่นาทีเพื่อประหยัดแบต\n")
+        sb.append(if (Scheduler.exactAllowed(this)) "โหมด exact\n" else "โหมด inexact\n")
         sb.append("system alarm clock: ").append(if (systemAlarmSet) "set" else "none").append("\n")
-
+        sb.append(Repo.lastQuiet).append("\n")
         return sb.toString()
     }
 
-    private fun mark(ok: Boolean): String {
-        return if (ok) "[ผ่าน]" else "[ยังไม่ผ่าน]"
-    }
+    private fun mark(ok: Boolean): String = if (ok) "[ผ่าน]" else "[ยังไม่ผ่าน]"
 
     private fun stamp(at: Instant, zone: TimeZone): String {
         val t = at.toLocalDateTime(zone)
         return pad2(t.dayOfMonth) + "/" + pad2(t.monthNumber) + " " +
-                pad2(t.hour) + ":" + pad2(t.minute) + ":" + pad2(t.second)
+                clockOf(at, zone) + ":" + pad2(t.second)
     }
 
-    private fun remaining(d: Duration): String {
-        if (d.isNegative()) return "ถึงแล้ว"
-        val total = d.inWholeSeconds
-        val days = total / 86400
-        val hours = (total % 86400) / 3600
-        val minutes = (total % 3600) / 60
-        val seconds = total % 60
-        val clock = pad2(hours.toInt()) + ":" + pad2(minutes.toInt()) + ":" + pad2(seconds.toInt())
-        if (days > 0) {
-            return days.toString() + " วัน " + clock
-        }
-        return clock
-    }
+    private fun pad2(n: Int): String = if (n < 10) "0$n" else n.toString()
 
-    private fun pad2(n: Int): String {
-        if (n < 10) return "0" + n
-        return n.toString()
-    }
+    // ─── system pages ───────────────────────────────────────────────────────
 
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT < 33) return
@@ -537,25 +747,39 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            openAppSettings()
+        }
+    }
+
     /**
-     * Opens this app's page in the system battery settings.
+     * Opens this app's page in the system settings.
      *
      * Deliberately NOT ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, which pops
      * a one-tap dialog: Google Play forbids that intent outside a short list of
      * app categories, and this app is not on it. Sending someone to the settings
-     * page and telling them which switch to look for is slower and allowed.
+     * page and saying which switch to look for is slower and allowed.
      *
-     * On Samsung the switch that matters is in a second place as well:
-     * Settings, Battery, Background usage limits, Never sleeping apps - which
+     * On Samsung the switch that matters is in a second place as well —
+     * Settings, Battery, Background usage limits, Never sleeping apps — which
      * no intent can open directly.
      */
-    /**
-     * The system page where exact alarms are granted.
-     *
-     * Wrapped because a phone that does not have this page is a phone that does
-     * not need it, and an app that crashes trying to open a settings screen has
-     * turned a late reminder into no app at all.
-     */
+    private fun openBatterySettings() = openAppSettings()
+
+    private fun openAppSettings() {
+        val uri = Uri.fromParts("package", packageName, null)
+        try {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
+        } catch (e: Exception) {
+            startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
+
     private fun openExactAlarmSettings() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         try {
@@ -564,17 +788,12 @@ class MainActivity : Activity() {
                     .setData(Uri.parse("package:$packageName")),
             )
         } catch (e: Exception) {
-            Toast.makeText(this, "เปิดหน้าตั้งค่าไม่ได้: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "เปิดหน้าตั้งค่าไม่ได้: " + e.message, Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun openBatterySettings() {
-        val uri = Uri.fromParts("package", packageName, null)
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri)
-        try {
-            startActivity(intent)
-        } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_SETTINGS))
-        }
+    private companion object {
+        const val DETAILS_SHUT = "รายละเอียดระบบ  ▾"
+        const val DETAILS_OPEN = "รายละเอียดระบบ  ▴"
     }
 }
