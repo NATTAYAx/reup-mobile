@@ -111,6 +111,10 @@ class SyncActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Before any view exists: everything below reads its colours out of
+        // Ui, and a screen that repaints into a different theme a moment
+        // after opening is worse than one with no choice at all.
+        Ui.load(this)
 
         title = "ซิงก์กับคอม"
 
@@ -124,35 +128,28 @@ class SyncActivity : Activity() {
         codeBox.setHorizontallyScrolling(false)
         codeBox.maxLines = 3
 
-        webdavChip = Button(this)
-        webdavChip.setOnClickListener { pick(BackendChoice.WEBDAV) }
-        driveChip = Button(this)
-        driveChip.setOnClickListener { pick(BackendChoice.DRIVE) }
+        webdavChip = Ui.chip(this, "เซิร์ฟเวอร์ในบ้าน") { pick(BackendChoice.WEBDAV) }
+        driveChip = Ui.chip(this, "Google Drive") { pick(BackendChoice.DRIVE) }
 
-        val chips = LinearLayout(this)
-        chips.orientation = LinearLayout.HORIZONTAL
-        chips.addView(webdavChip, chipParams())
-        chips.addView(driveChip, chipParams())
+        val chips = Ui.strip(this)
+        chips.addView(webdavChip, Ui.cell(this, true))
+        chips.addView(driveChip, Ui.cell(this))
 
-        val saveButton = Button(this)
-        saveButton.text = "บันทึกการตั้งค่า"
-        saveButton.setOnClickListener { save() }
+        val saveButton = Ui.secondary(this, "บันทึกการตั้งค่า") { save() }
+        driveButton = Ui.secondary(this, "เชื่อม Google Drive") { drive() }
+        syncButton = Ui.primary(this, "ซิงก์ตอนนี้") { run() }
 
-        driveButton = Button(this)
-        driveButton.setOnClickListener { drive() }
+        // Kept monospace, unlike the forms: this one is a readout of what a
+        // folder and a server said, read as columns.
+        status = Ui.mono(this)
+        status.setTextIsSelectable(true)
 
-        syncButton = Button(this)
-        syncButton.text = "ซิงก์ตอนนี้"
-        syncButton.setOnClickListener { run() }
-
-        status = TextView(this)
-        status.setTextColor(Color.parseColor("#E8E8EA"))
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-        status.typeface = Typeface.MONOSPACE
-
-        val column = LinearLayout(this)
-        column.orientation = LinearLayout.VERTICAL
-        column.setPadding(48, 48, 48, 64)
+        val screen = Ui.sticky(this)
+        val column = screen.column
+        column.addView(
+            Ui.header(this, "ซิงก์กับคอม", "โฟลเดอร์ รหัสจับคู่ และการดึงข้อมูล"),
+            Ui.row(this, 0f),
+        )
 
         // The chooser only exists when there is something to choose. Anyone who
         // cloned the repository has no local.properties and therefore no client
@@ -170,17 +167,16 @@ class SyncActivity : Activity() {
         column.addView(label("รหัสจับคู่"), rowParams())
         column.addView(note(CODE_NOTE), rowParams())
         column.addView(codeBox, rowParams())
-        column.addView(saveButton, rowParams())
         if (driveAvailable) {
-            column.addView(driveButton, rowParams())
+            column.addView(driveButton, Ui.row(this, 24f))
         }
-        column.addView(syncButton, rowParams())
         column.addView(status, rowParams())
 
-        val scroll = ScrollView(this)
-        scroll.setBackgroundColor(Color.parseColor("#0F0F12"))
-        scroll.addView(column)
-        setContentView(scroll)
+        // Saving and syncing are the two verbs of this screen, so they are
+        // where a thumb is rather than at the end of a form.
+        screen.bar.addView(saveButton, Ui.cell(this, true))
+        screen.bar.addView(syncButton, Ui.cell(this))
+        setContentView(screen.root)
 
         render()
         load()
@@ -420,12 +416,8 @@ class SyncActivity : Activity() {
         val webdav = choice == BackendChoice.WEBDAV
 
         if (::webdavChip.isInitialized) {
-            webdavChip.text = "เซิร์ฟเวอร์ในบ้าน"
-            driveChip.text = "Google Drive"
-            webdavChip.typeface = if (webdav) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-            driveChip.typeface = if (webdav) Typeface.DEFAULT else Typeface.DEFAULT_BOLD
-            webdavChip.alpha = if (webdav) 1f else 0.45f
-            driveChip.alpha = if (webdav) 0.45f else 1f
+            Ui.select(this, webdavChip, webdav)
+            Ui.select(this, driveChip, !webdav)
         }
 
         // Three boxes that do nothing is a screen that says something untrue.
@@ -490,50 +482,24 @@ class SyncActivity : Activity() {
         app.reup.sync.SyncBackend.Drive -> "Google Drive"
     }
 
-    private fun field(hint: String, type: Int): EditText {
-        val e = EditText(this)
-        e.hint = hint
-        e.inputType = InputType.TYPE_CLASS_TEXT or type
-        e.setTextColor(Color.parseColor("#E8E8EA"))
-        e.setHintTextColor(Color.parseColor("#6B6B72"))
-        e.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        return e
-    }
+    // ─── looks ──────────────────────────────────────────────────────────────
+    //
+    // These four were a private copy of a design, in every screen, in raw
+    // pixels and hand-picked greys. What is left of them is the one decision
+    // that really is local: which keyboard this particular box wants.
 
-    private fun label(text: String): TextView {
-        val t = TextView(this)
-        t.text = text
-        t.setTextColor(Color.parseColor("#E8E8EA"))
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        t.typeface = Typeface.DEFAULT_BOLD
-        return t
-    }
+    private fun field(hint: String, type: Int): EditText =
+        Ui.field(this, hint, InputType.TYPE_CLASS_TEXT or type)
 
-    private fun note(text: String): TextView {
-        val t = TextView(this)
-        t.text = text
-        t.setTextColor(Color.parseColor("#8A8A92"))
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        return t
-    }
+    private fun label(text: String): TextView = Ui.fieldLabel(this, text)
 
-    private fun rowParams(): LinearLayout.LayoutParams {
-        val p = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        )
-        p.topMargin = 24
-        return p
-    }
+    private fun note(text: String): TextView = Ui.note(this, text)
 
-    private fun chipParams(): LinearLayout.LayoutParams {
-        val p = LinearLayout.LayoutParams(
-            0,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            1f,
-        )
-        return p
-    }
+    // topMargin was 24 PIXELS, which on this phone is about nine points and on
+    // a cheap one is twenty-four. Same code, two layouts, neither chosen.
+    private fun rowParams(): LinearLayout.LayoutParams = Ui.row(this, 14f)
+
+    private fun chipParams(): LinearLayout.LayoutParams = Ui.cell(this)
 
     private companion object {
         /**

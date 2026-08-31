@@ -55,10 +55,18 @@ class ScanSlipActivity : Activity() {
 
     override fun onCreate(saved: Bundle?) {
         super.onCreate(saved)
+        // Before any view exists: everything below reads its colours out of
+        // Ui, and a screen that repaints into a different theme a moment
+        // after opening is worse than one with no choice at all.
+        Ui.load(this)
         title = TITLE
 
-        val screen = Ui.screen(this)
+        val screen = Ui.sticky(this)
         val column = screen.column
+        column.addView(
+            Ui.header(this, "อ่านสลิป", "ข้อความดิบที่ตัวอ่านเห็น กับสิ่งที่กฎอ่านออกมา"),
+            Ui.row(this, 0f),
+        )
 
         val pick = Ui.primary(this, PICK) { choose() }
 
@@ -70,8 +78,7 @@ class ScanSlipActivity : Activity() {
         rawBox.setTextIsSelectable(true)
         readingBox.setTextIsSelectable(true)
 
-        column.addView(pick, Ui.row(this, 0f))
-        column.addView(status, Ui.row(this, 8f))
+        column.addView(status, Ui.row(this, 12f))
 
         // Two panels rather than two blocks of text, because the whole point of
         // this screen is that they are two different answers and one of them
@@ -86,7 +93,8 @@ class ScanSlipActivity : Activity() {
         readCard.addView(readingBox, Ui.row(this, 8f))
         column.addView(readCard, Ui.row(this, 12f))
 
-        setContentView(screen.scroll)
+        screen.bar.addView(pick, Ui.cell(this, true))
+        setContentView(screen.root)
     }
 
     override fun onDestroy() {

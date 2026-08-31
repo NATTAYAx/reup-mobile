@@ -95,6 +95,7 @@ class AddMoneyActivity : Activity() {
     private lateinit var saveButton: Button
     private lateinit var cancelButton: Button
     private lateinit var status: TextView
+    private lateinit var titleView: TextView
     private lateinit var monthLine: TextView
     private lateinit var recentLabel: TextView
     private lateinit var recentHint: TextView
@@ -116,6 +117,10 @@ class AddMoneyActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Before any view exists: everything below reads its colours out of
+        // Ui, and a screen that repaints into a different theme a moment
+        // after opening is worse than one with no choice at all.
+        Ui.load(this)
         incoming = intent.getBooleanExtra(EXTRA_INCOMING, false)
 
         amountBox = field("จำนวนเงิน", InputType.TYPE_NUMBER_FLAG_DECIMAL)
@@ -129,27 +134,19 @@ class AddMoneyActivity : Activity() {
         categoryLabel = label("หมวด")
         sourceLabel = label("ได้รับจาก")
 
-        outButton = Button(this)
-        outButton.text = "จ่ายออก"
-        outButton.setOnClickListener { setDirection(false) }
-        inButton = Button(this)
-        inButton.text = "รับเข้า"
-        inButton.setOnClickListener { setDirection(true) }
+        outButton = Ui.chip(this, "จ่ายออก") { setDirection(false) }
+        inButton = Ui.chip(this, "รับเข้า") { setDirection(true) }
 
         directionRow = LinearLayout(this)
         directionRow.orientation = LinearLayout.HORIZONTAL
-        directionRow.addView(outButton, chipParams())
-        directionRow.addView(inButton, chipParams())
+        directionRow.addView(outButton, Ui.cell(this, true))
+        directionRow.addView(inButton, Ui.cell(this))
 
         categoryRow = LinearLayout(this)
         categoryRow.orientation = LinearLayout.VERTICAL
 
-        saveButton = Button(this)
-        saveButton.setOnClickListener { save() }
-
-        cancelButton = Button(this)
-        cancelButton.text = CANCEL_EDIT
-        cancelButton.setOnClickListener { cancelEdit() }
+        saveButton = Ui.primary(this, "บันทึก") { save() }
+        cancelButton = Ui.secondary(this, CANCEL_EDIT) { cancelEdit() }
 
         monthLine = note("")
         recentLabel = label(RECENT_TITLE)
@@ -157,14 +154,17 @@ class AddMoneyActivity : Activity() {
         recentBox = LinearLayout(this)
         recentBox.orientation = LinearLayout.VERTICAL
 
-        status = TextView(this)
-        status.setTextColor(Color.parseColor("#E8E8EA"))
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-        status.typeface = Typeface.MONOSPACE
+        status = Ui.status(this)
 
-        val column = LinearLayout(this)
-        column.orientation = LinearLayout.VERTICAL
-        column.setPadding(48, 48, 48, 64)
+        val screen = Ui.sticky(this)
+        val column = screen.column
+
+        // The manifest has said android:label on this activity since the day it
+        // was written, and render() computes four different titles. Under
+        // Theme.Material.NoActionBar nothing has ever drawn either of them.
+        val head = Ui.header(this, "")
+        titleView = head.getChildAt(0) as TextView
+        column.addView(head, Ui.row(this, 0f))
         // Above everything, because the useful thing to know while deciding
         // whether to buy something is what has already gone this month.
         column.addView(monthLine, rowParams())
@@ -179,17 +179,16 @@ class AddMoneyActivity : Activity() {
         column.addView(noteBox, rowParams())
         column.addView(label("วันที่"), rowParams())
         column.addView(dateBox, rowParams())
-        column.addView(saveButton, rowParams())
-        column.addView(cancelButton, rowParams())
         column.addView(status, rowParams())
         column.addView(recentLabel, rowParams())
         column.addView(recentHint, rowParams())
         column.addView(recentBox, rowParams())
 
-        val scroll = ScrollView(this)
-        scroll.setBackgroundColor(Color.parseColor("#0F0F12"))
-        scroll.addView(column)
-        setContentView(scroll)
+        // The one thing this screen is for, pinned where a thumb reaches and
+        // where a form that grows cannot push it off the bottom of the glass.
+        screen.bar.addView(cancelButton, Ui.cell(this, true))
+        screen.bar.addView(saveButton, Ui.cell(this))
+        setContentView(screen.root)
 
         render()
         load()
@@ -301,21 +300,15 @@ class AddMoneyActivity : Activity() {
             val row = LinearLayout(this)
             row.orientation = LinearLayout.HORIZONTAL
 
-            val left = TextView(this)
-            left.text = "${dayOf(e.date, today)}  ${nameOf(e)}"
-            left.setTextColor(Color.parseColor("#B9B9C0"))
-            left.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            val left = Ui.note(this, dayOf(e.date, today) + "  " + nameOf(e))
             left.maxLines = 1
             left.ellipsize = android.text.TextUtils.TruncateAt.END
 
-            val right = TextView(this)
             // The sign carries the direction on its own; the colour only agrees
             // with it, so nothing is lost reading this in sunlight.
             val sign = if (e.incoming) "+" else "-"
-            right.text = "$sign${e.amount.toLong()} ${e.currency}"
-            right.setTextColor(Color.parseColor(if (e.incoming) "#8ED0A8" else "#E8E8EA"))
-            right.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            right.typeface = Typeface.MONOSPACE
+            val right = Ui.mono(this, sign + e.amount.toLong() + " " + e.currency)
+            right.setTextColor(if (e.incoming) Ui.POSITIVE else Ui.TEXT)
 
             val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             row.addView(left, lp)
@@ -331,13 +324,17 @@ class AddMoneyActivity : Activity() {
             // wrong one with a thumb, and removing a row is not the thing this
             // screen is for.
             row.setOnLongClickListener { rowMenu(e); true }
-
-            val p = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+            // Room to press, and a line under each one: twenty amounts with
+            // nothing between them is a block of text, not a list.
+            row.setPadding(Ui.dp(this, 2f), Ui.dp(this, 9f), Ui.dp(this, 2f), Ui.dp(this, 9f))
+            recentBox.addView(row, Ui.row(this, 0f))
+            recentBox.addView(
+                Ui.divider(this),
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    Ui.dp(this, 1f),
+                ),
             )
-            p.topMargin = 16
-            recentBox.addView(row, p)
         }
     }
 
@@ -493,12 +490,13 @@ class AddMoneyActivity : Activity() {
                 categoryRow.addView(row, rowParams())
                 row = newChipRow()
             }
-            val b = Button(this)
-            b.text = c.emoji + " " + (c.label ?: c.key)
+            val b = Ui.chip(this, c.emoji + " " + (c.label ?: c.key)) {
+                category = c.key
+                render()
+            }
             b.tag = c.key
-            b.setOnClickListener { category = c.key; render() }
             chips.add(b)
-            row.addView(b, chipParams())
+            row.addView(b, Ui.cell(this, i % 3 == 0, 6f))
         }
         categoryRow.addView(row, rowParams())
     }
@@ -534,10 +532,11 @@ class AddMoneyActivity : Activity() {
         cancelButton.visibility =
             if (edit) android.view.View.VISIBLE else android.view.View.GONE
 
-        outButton.alpha = if (incoming) 0.55f else 1f
-        inButton.alpha = if (incoming) 1f else 0.55f
-        outButton.typeface = if (incoming) Typeface.DEFAULT else Typeface.DEFAULT_BOLD
-        inButton.typeface = if (incoming) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        titleView.text = title
+        // Selection used to be alpha 0.55 and bold, which on a grey slab in the
+        // dark reads as "unavailable" rather than "not this one".
+        Ui.select(this, outButton, !incoming)
+        Ui.select(this, inButton, incoming)
 
         unitLabel.text = "จำนวนเงิน ($currency)"
         unitNote.text = if (currencyKnown) "" else UNIT_GUESSED
@@ -551,11 +550,7 @@ class AddMoneyActivity : Activity() {
         show(sourceLabel, incoming)
         show(sourceBox, incoming)
 
-        for (b in chips) {
-            val mine = b.tag == category
-            b.alpha = if (mine) 1f else 0.55f
-            b.typeface = if (mine) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        }
+        for (b in chips) Ui.select(this, b, b.tag == category)
 
         saveButton.isEnabled = !busy && !blocked
         saveButton.text = when {
@@ -664,44 +659,27 @@ class AddMoneyActivity : Activity() {
         else -> code
     }
 
-    private fun field(hint: String, type: Int): EditText {
-        val e = EditText(this)
-        e.hint = hint
-        e.inputType = if (type == 0) InputType.TYPE_CLASS_TEXT else InputType.TYPE_CLASS_NUMBER or type
-        e.setTextColor(Color.parseColor("#E8E8EA"))
-        e.setHintTextColor(Color.parseColor("#6B6B72"))
-        e.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        return e
-    }
+    // ─── looks ──────────────────────────────────────────────────────────────
+    //
+    // These four were a private copy of a design, in every screen, in raw
+    // pixels and hand-picked greys. What is left of them is the one decision
+    // that really is local: which keyboard this particular box wants.
 
-    private fun label(text: String): TextView {
-        val t = TextView(this)
-        t.text = text
-        t.setTextColor(Color.parseColor("#E8E8EA"))
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        t.typeface = Typeface.DEFAULT_BOLD
-        return t
-    }
+    private fun field(hint: String, type: Int): EditText = Ui.field(
+        this,
+        hint,
+        if (type == 0) InputType.TYPE_CLASS_TEXT else InputType.TYPE_CLASS_NUMBER or type,
+    )
 
-    private fun note(text: String): TextView {
-        val t = TextView(this)
-        t.text = text
-        t.setTextColor(Color.parseColor("#8A8A92"))
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        return t
-    }
+    private fun label(text: String): TextView = Ui.fieldLabel(this, text)
 
-    private fun rowParams(): LinearLayout.LayoutParams {
-        val p = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        )
-        p.topMargin = 24
-        return p
-    }
+    private fun note(text: String): TextView = Ui.note(this, text)
 
-    private fun chipParams(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    // topMargin was 24 PIXELS, which on this phone is about nine points and on
+    // a cheap one is twenty-four. Same code, two layouts, neither chosen.
+    private fun rowParams(): LinearLayout.LayoutParams = Ui.row(this, 14f)
+
+    private fun chipParams(): LinearLayout.LayoutParams = Ui.cell(this)
 
     companion object {
         /** Open straight into the payment side. Absent means spending. */
