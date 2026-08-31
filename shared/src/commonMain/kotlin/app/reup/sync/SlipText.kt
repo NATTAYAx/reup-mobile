@@ -131,6 +131,32 @@ private fun repairZeros(text: String): String =
     }
 
 // A number as banks print it: grouped with commas, two decimals, sometimes not.
+/**
+ * Whether a number is written the way printed money is written.
+ *
+ * WHY THIS RULE EXISTS, AND WHAT IT COST TO LEARN
+ *
+ * A slip came back with its amount line destroyed. What was printed as 70.60
+ * arrived as the two characters `จ9`, on the line under a `จำนวน:` that had
+ * lost its own number. The rule above had just been taught that a bare number
+ * under an amount label counts as labelled, so it read a seventy baht transfer
+ * as nine baht, reported `problems none`, and offered to put it in the ledger.
+ *
+ * That is the worst thing this file can do. A blank is a question. A wrong
+ * number that looks right is an entry nobody will ever go back and check.
+ *
+ * The fix is not another exception. It is that a baht amount on a Thai bank
+ * slip is always printed with its satang — 70.60, 2.00, 1,250.00 — so a number
+ * with no decimal part and no thousands separator, on a line that does not say
+ * บาท anywhere, is not an amount that was printed. It is a digit found in noise.
+ *
+ * The trade is stated rather than hidden: a slip that really does print a bare
+ * `70` under its label is now refused instead of read. Refusing is the side of
+ * that trade this whole file is built on.
+ */
+private fun looksLikeMoney(token: String): Boolean =
+    token.contains(".") || token.contains(",")
+
 private val NUMBER = Regex("""\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?""")
 
 // Lines whose number is not the amount that left the account.
@@ -176,7 +202,12 @@ fun readSlip(raw: String): SlipReading {
     val currency = if (Regex("฿|บาท|THB").containsMatchIn(text)) "THB" else null
     if (currency == null) problems += "no-currency"
     val date = readDate(text) ?: run { problems += "no-date"; null }
-    val reference = readReference(lines)
+    // Reported like the other three. Without this line a slip whose reference
+    // never made it out of the recogniser reads as `reference —` next to
+    // `problems none`, which says the field is empty and nothing is wrong at
+    // the same time. On a screen whose whole job is to say which half failed,
+    // that is the one sentence it must not print.
+    val reference = readReference(lines) ?: run { problems += "no-reference"; null }
 
     return SlipReading(
         amount = amount,
@@ -235,6 +266,10 @@ private fun readAmount(lines: List<String>, problems: MutableList<String>): Doub
         val money = Regex("฿|บาท|THB").containsMatchIn(line)
         if (!labelled && !money) continue
         for (m in NUMBER.findAll(line)) {
+            // Printed money on a Thai slip always carries its satang, so a bare
+            // digit is only an amount when its own line says บาท. See
+            // [looksLikeMoney] for what this one cost to learn.
+            if (!money && !looksLikeMoney(m.value)) continue
             val v = m.value.replace(",", "").toDoubleOrNull() ?: continue
             // A year is not an amount, and neither is an account number that
             // happens to sit on the same line as the word baht.
@@ -336,7 +371,14 @@ private fun readReference(lines: List<String>): String? {
         for (j in i..minOf(i + 6, lines.lastIndex)) {
             val here = lines[j]
             if (j != i && REFERENCE_LABEL.containsMatchIn(here)) break
-            val token = Regex("""[A-Za-z0-9]{10,}""").findAll(here)
+            // Fourteen, not ten. On one slip the recogniser split
+            // 016243133947BPM06163 into `01624313394` and `7BRMOGI63` with a
+            // space in the middle, and a ten-character floor happily returned
+            // the first half. Half a reference is not a shorter reference, it
+            // is a different one, and once it sits in a note field it looks
+            // exactly as trustworthy as a whole one. Thai bank references run
+            // fifteen to twenty-five characters; under fourteen is a fragment.
+            val token = Regex("""[A-Za-z0-9]{14,}""").findAll(here)
                 .map { it.value }
                 // Mostly digits, which is what a reference is and what the
                 // words around it are not. `สแกนตรวจสอบสลิป` is long too.

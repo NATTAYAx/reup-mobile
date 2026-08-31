@@ -91,6 +91,7 @@ object SlipOcr {
 
     private const val TAG = "SlipOcr"
 
+
     /** The names in `app/src/main/assets/tessdata/`. */
     private val FILES = listOf("tha.traineddata", "eng.traineddata")
 
@@ -124,6 +125,27 @@ object SlipOcr {
             // more nonsense, and the rules in SlipText already refuse to guess
             // when they see more than one candidate.
             tess.pageSegMode = TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
+            // ── WHY THE PICTURE IS NOT ENLARGED FIRST ────────────────────
+            //
+            // It was, for exactly one round, on the theory that the recogniser
+            // was being shown letters at half the size it was trained on. The
+            // experiment ran on a real slip and made the reading worse in the
+            // way that matters most: the date had been read correctly and came
+            // back as ว1สาดต=ออ9ร, and the amount had been read correctly and
+            // came back as จ9.
+            //
+            // The reason is upstream. Anything with a long edge over the cap is
+            // already sampled down on the way in, so a forty megapixel photo
+            // cannot take the app with it. Enlarging afterwards takes a picture
+            // that has already had detail thrown away and spreads what is left
+            // over four times the pixels. Nothing is recovered, and the edges
+            // the recogniser matches on are softened.
+            //
+            // The lesson is not never enlarge. It is that there is one decision
+            // about size and it has to be made once, where the image is decoded
+            // and the original dimensions are still known. Made in two places
+            // in opposite directions, a picture ends up downscaled and then
+            // blown back up.
             tess.setImage(bitmap)
             val text = tess.utF8Text ?: ""
             if (text.isBlank()) SlipRead.NoText else SlipRead.Ok(text)
@@ -137,6 +159,7 @@ object SlipOcr {
             try { tess.recycle() } catch (_: Exception) { }
         }
     }
+
 
     /**
      * What is actually in assets/tessdata, for the message when nothing is.
