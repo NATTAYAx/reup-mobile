@@ -6,6 +6,7 @@ import android.util.Log
 import app.reup.sync.SyncConfigs
 import app.reup.sync.driveTokenSource
 import app.reup.core.QuietHours
+import app.reup.sync.Db
 import app.reup.sync.MoneyRepo
 import app.reup.sync.QuietSetting
 import app.reup.core.ScheduledTask
@@ -73,7 +74,34 @@ object Repo {
      * a handful of statements around the one database handle, and the screen
      * that uses it is opened by hand rather than by an alarm going off.
      */
-    suspend fun money(ctx: Context): MoneyRepo = MoneyRepo(AndroidDb.shared(ctx))
+    suspend fun money(ctx: Context): MoneyRepo = MoneyRepo(database(ctx))
+
+    /**
+     * The database, with its schema already applied.
+     *
+     * WHY THIS EXISTS
+     *
+     * TaskRepo.open() is the only thing in the app that runs Bootstrap, and for
+     * months it was also the only way anybody got a handle — so the schema was
+     * always there by the time it mattered. Then the sync path, the money
+     * screen and the whole sync settings screen started calling
+     * AndroidDb.shared() directly, which opens the file and creates no tables
+     * at all.
+     *
+     * On every phone that has ever run an older build this is invisible: the
+     * tables are already in the file. It only appears on a first install, on
+     * whichever screen happens to touch the database before the home screen has
+     * finished reading — and then it appears as `no such table`, which reads
+     * like a corrupt database rather than one that was never built.
+     *
+     * So there is one door now. Getting the handle goes through the thing that
+     * applies the schema, and open() caches, so this costs one boolean after
+     * the first call.
+     */
+    suspend fun database(ctx: Context): Db {
+        open(ctx)
+        return AndroidDb.shared(ctx)
+    }
 
     suspend fun open(ctx: Context): TaskRepo {
         opened?.let { return it }
@@ -253,7 +281,7 @@ object Repo {
     }
 
     suspend fun syncQuietly(ctx: Context): Boolean = try {
-        val db = AndroidDb.shared(ctx)
+        val db = database(ctx)
         val http = AndroidHttpTransport()
         val tokens = driveTokenSource(db, http, AndroidSignIn.clientId()) {
             System.currentTimeMillis() / 1000

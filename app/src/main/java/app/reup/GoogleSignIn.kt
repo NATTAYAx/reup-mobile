@@ -48,7 +48,12 @@ import app.reup.sync.SyncValue
 private const val PENDING_KEY = "sync_google_pending"
 
 /** The path after the scheme. Any path works; this one says what it is. */
-private const val REDIRECT_PATH = "/oauth2redirect"
+// Both halves of the redirect have to say the same thing: this file builds the
+// URI that is sent to Google, and OAuthRedirectActivity checks what comes back
+// against it. They were two private copies, which is the same shape as the
+// missing colon in the scheme that cost a round — a string two files have to
+// agree on, with nothing making them.
+internal const val REDIRECT_PATH = "/oauth2redirect"
 
 class AndroidSignIn(
     private val db: Db,

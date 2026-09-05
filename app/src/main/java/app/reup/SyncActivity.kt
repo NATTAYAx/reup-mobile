@@ -4,6 +4,8 @@ import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.util.TypedValue
 import android.view.View
@@ -84,6 +86,19 @@ class SyncActivity : Activity() {
     private lateinit var codeBox: EditText
     private lateinit var syncButton: Button
     private lateinit var driveButton: Button
+    private lateinit var saveButton: Button
+
+    /**
+     * Proof that a long sync is working rather than stuck.
+     *
+     * The first sync after a fresh install pulls the whole folder — the
+     * snapshot plus every batch written since — so minutes is a normal answer
+     * and not a broken one. The screen said "กำลังซิงก์" and then nothing at
+     * all, which is indistinguishable from a hang, and the only sensible thing
+     * to do about a hang is press the button again.
+     */
+    private val ticker = Handler(Looper.getMainLooper())
+    private var startedAt = 0L
     private lateinit var webdavChip: Button
     private lateinit var driveChip: Button
     private lateinit var status: TextView
@@ -135,7 +150,7 @@ class SyncActivity : Activity() {
         chips.addView(webdavChip, Ui.cell(this, true))
         chips.addView(driveChip, Ui.cell(this))
 
-        val saveButton = Ui.secondary(this, "บันทึกการตั้งค่า") { save() }
+        saveButton = Ui.secondary(this, "บันทึกการตั้งค่า") { save() }
         driveButton = Ui.secondary(this, "เชื่อม Google Drive") { drive() }
         syncButton = Ui.primary(this, "ซิงก์ตอนนี้") { run() }
 
@@ -194,7 +209,7 @@ class SyncActivity : Activity() {
     override fun onResume() {
         super.onResume()
         scope.launch {
-            val db = AndroidDb.shared(this@SyncActivity)
+            val db = Repo.database(this@SyncActivity)
             config = SyncConfigs.load(db)
             driveOn = AndroidSignIn(db, AndroidHttpTransport()).connected()
             signInNote = lastSignIn()
@@ -202,8 +217,30 @@ class SyncActivity : Activity() {
         }
     }
 
+    /**
+     * Counts the seconds out loud while a sync runs.
+     *
+     * Stops itself the moment [busy] goes false, so there is nothing to cancel
+     * on the happy path and no second place that has to remember to.
+     */
+    private fun beat() {
+        if (!busy) return
+        val seconds = (System.currentTimeMillis() - startedAt) / 1000
+        line = if (seconds < 12) {
+            "กำลังซิงก์ " + seconds + " วินาที"
+        } else {
+            // Only after it has already felt long. Saying it up front would be
+            // a warning on every sync, including the ones that take two seconds.
+            "กำลังซิงก์ " + seconds + " วินาที · ครั้งแรกหลังลงแอปใหม่ต้องดึงของทั้งหมด" +
+                    "ลงมา อาจใช้เวลาหลายนาที ปล่อยหน้านี้เปิดไว้ได้"
+        }
+        render()
+        ticker.postDelayed({ beat() }, 1000L)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        ticker.removeCallbacksAndMessages(null)
         scope.cancel()
     }
 
@@ -224,7 +261,7 @@ class SyncActivity : Activity() {
                 // tables as a side effect of syncing is a function nobody can
                 // reason about when the tables turn out to be wrong.
                 val repo = Repo.open(this@SyncActivity)
-                config = SyncConfigs.load(AndroidDb.shared(this@SyncActivity))
+                config = SyncConfigs.load(Repo.database(this@SyncActivity))
                 fill(SyncSetup.fieldsOf(config))
                 signInNote = lastSignIn()
                 taskCount = repo.tasks().size
@@ -253,7 +290,7 @@ class SyncActivity : Activity() {
             }
             is SetupResult.Accepted -> scope.launch {
                 try {
-                    val db = AndroidDb.shared(this@SyncActivity)
+                    val db = Repo.database(this@SyncActivity)
                     // save() compares the old target with the new one and drops
                     // the cursor when they differ, which is exactly what has to
                     // happen when this switches between WebDAV and Drive: the
@@ -281,7 +318,7 @@ class SyncActivity : Activity() {
         val id = AndroidSignIn.clientId() ?: return
 
         scope.launch {
-            val db = AndroidDb.shared(this@SyncActivity)
+            val db = Repo.database(this@SyncActivity)
             val signIn = AndroidSignIn(db, AndroidHttpTransport())
 
             if (driveOn) {
@@ -331,12 +368,12 @@ class SyncActivity : Activity() {
 
         busy = true
         summary = null
-        line = "กำลังซิงก์"
-        render()
+        startedAt = System.currentTimeMillis()
+        beat()
 
         scope.launch {
             try {
-                val db = AndroidDb.shared(this@SyncActivity)
+                val db = Repo.database(this@SyncActivity)
                 val http = AndroidHttpTransport()
                 // Null for WebDAV, and null for Drive when nobody has signed in
                 // on this phone — which syncNow reads as "not set up", the same
@@ -370,6 +407,7 @@ class SyncActivity : Activity() {
                 line = e.message ?: e.toString()
             }
             busy = false
+            ticker.removeCallbacksAndMessages(null)
             render()
         }
     }
@@ -378,7 +416,7 @@ class SyncActivity : Activity() {
 
     private suspend fun lastSignIn(): String? {
         return try {
-            val rows = AndroidDb.shared(this@SyncActivity).select(
+            val rows = Repo.database(this@SyncActivity).select(
                 "SELECT value FROM app_settings WHERE key = ?",
                 listOf(SyncValue.Text(SIGN_IN_NOTE_KEY)),
             )
@@ -467,6 +505,13 @@ class SyncActivity : Activity() {
 
         status.text = sb.toString()
         syncButton.isEnabled = !busy
+        // These two were left pressable while a sync ran. Every entry point
+        // starts with `if (busy) return`, so pressing them was already
+        // harmless — and that is the problem: a button that looks pressable and
+        // does nothing at all reads as a frozen screen, which is exactly what
+        // makes somebody press it again.
+        if (::saveButton.isInitialized) saveButton.isEnabled = !busy
+        if (::driveButton.isInitialized) driveButton.isEnabled = !busy
     }
 
     /**

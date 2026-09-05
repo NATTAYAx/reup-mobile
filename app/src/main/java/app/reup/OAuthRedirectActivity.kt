@@ -77,7 +77,8 @@ import kotlinx.coroutines.launch
 const val SIGN_IN_NOTE_KEY: String = "sync_google_last"
 
 /** The path after the scheme, as built by AndroidSignIn.redirectUri. */
-private const val REDIRECT_PATH = "/oauth2redirect"
+// REDIRECT_PATH comes from GoogleSignIn.kt, which is the file that builds the
+// URI this one is checking. Same package, so there is nothing to import.
 
 /**
  * Process-lifetime, on purpose. See the header. Main, because it ends in a
@@ -133,7 +134,7 @@ class OAuthRedirectActivity : Activity() {
 
         redirectWork.launch {
             val result = try {
-                AndroidSignIn(AndroidDb.shared(app), AndroidHttpTransport())
+                AndroidSignIn(Repo.database(app), AndroidHttpTransport())
                     .finish(uri, clientId)
             } catch (e: Exception) {
                 // Kept as it came. An unexpected failure rewritten into a
@@ -169,7 +170,7 @@ class OAuthRedirectActivity : Activity() {
 
     private suspend fun note(ctx: Context, text: String) {
         try {
-            AndroidDb.shared(ctx).execute(
+            Repo.database(ctx).execute(
                 "INSERT INTO app_settings (key, value) VALUES (?, ?) " +
                         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 listOf(SyncValue.Text(SIGN_IN_NOTE_KEY), SyncValue.Text(text)),

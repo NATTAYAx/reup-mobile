@@ -58,6 +58,8 @@
 
 package app.reup.sync
 
+import app.reup.core.THAI_MONTHS_SHORT
+
 /** What could be read off a slip. Anything unreadable is null, never a guess. */
 data class SlipReading(
     val amount: Double? = null,
@@ -172,11 +174,17 @@ private val IS_THE_AMOUNT = Regex(
     RegexOption.IGNORE_CASE,
 )
 
-private val THAI_MONTHS = listOf(
-    "ม.ค." to 1, "ก.พ." to 2, "มี.ค." to 3, "เม.ย." to 4,
-    "พ.ค." to 5, "มิ.ย." to 6, "ก.ค." to 7, "ส.ค." to 8,
-    "ก.ย." to 9, "ต.ค." to 10, "พ.ย." to 11, "ธ.ค." to 12,
-)
+/**
+ * The same twelve abbreviations the date line prints, read in the other
+ * direction.
+ *
+ * Derived rather than written out again. They were two lists, one here for
+ * matching what a bank printed and one in Face.kt for printing a date, and the
+ * day one of them changed nothing would have failed — a slip would simply stop
+ * being readable in one month of the year.
+ */
+private val MONTH_LABELS: List<Pair<String, Int>> =
+    THAI_MONTHS_SHORT.mapIndexed { i, label -> label to (i + 1) }
 
 private val REFERENCE_LABEL = Regex(
     "เลขที่รายการ|รหัสอ้างอิง|เลขอ้างอิง|reference|ref\\.?\\s*no|transaction\\s*id",
@@ -297,7 +305,7 @@ private fun readAmount(lines: List<String>, problems: MutableList<String>): Doub
  * the row five centuries out with nothing on screen to notice by.
  */
 private fun readDate(text: String): String? {
-    for ((label, month) in THAI_MONTHS) {
+    for ((label, month) in MONTH_LABELS) {
         val m = Regex("""(\d{1,2})\s*""" + Regex.escape(label) + """\s*(\d{2,4})""").find(text)
         if (m != null) {
             val day = m.groupValues[1].toInt()
