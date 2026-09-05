@@ -47,7 +47,15 @@ private val THAI_MONTHS = listOf(
     "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
 )
 
-private val THAI_MONTHS_SHORT = listOf(
+/**
+ * Shared with the slip reader, which parses these rather than printing them.
+ *
+ * Two lists of the same twelve strings is the shape of every bug this project
+ * has spent a month removing, and this one had a direction: SlipText matched
+ * what a bank printed against its copy, and this file printed dates from its
+ * own. Nothing would have gone red the day they stopped agreeing.
+ */
+internal val THAI_MONTHS_SHORT = listOf(
     "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
     "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.",
 )

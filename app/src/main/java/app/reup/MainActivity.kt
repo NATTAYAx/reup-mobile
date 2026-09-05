@@ -143,7 +143,7 @@ class MainActivity : Activity() {
      * moment midnight turns พรุ่งนี้ into วันนี้. So the shape gets a signature,
      * and views are rebuilt when it changes rather than on a timer.
      */
-    private var shape = ""
+    private var shape = NOTHING_DRAWN
 
     private var alarms: List<Alarm> = emptyList()
     private var alarmsAt: Instant = Instant.fromEpochMilliseconds(0)
@@ -346,7 +346,7 @@ class MainActivity : Activity() {
     /** Force the queue and the views to be worked out again from scratch. */
     private fun redraw() {
         alarmsAt = Instant.fromEpochMilliseconds(0)
-        shape = ""
+        shape = NOTHING_DRAWN
         refresh()
     }
 
@@ -793,6 +793,20 @@ class MainActivity : Activity() {
     }
 
     private companion object {
+        /**
+         * Not the empty string.
+         *
+         * A screen with nothing on it produces an empty signature, and the
+         * empty string was also what `shape` started as — so on a phone whose
+         * database could not be read, the two matched, the views were never
+         * built, and the card that exists to say why the list is empty was
+         * itself empty. A blank panel under a warning, which is the least
+         * useful thing this screen has ever drawn.
+         *
+         * A value no signature can ever have.
+         */
+        const val NOTHING_DRAWN = "\u0000"
+
         const val DETAILS_SHUT = "รายละเอียดระบบ  ▾"
         const val DETAILS_OPEN = "รายละเอียดระบบ  ▴"
     }
