@@ -94,7 +94,16 @@ private val OFFSET_MS = Regex("""^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d
 private val OFFSET = Regex("""^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$""")
 private val LOCAL_T = Regex("""^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}""")
 private val LEGACY_SPACE = Regex("""^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}""")
-private val HHMM = Regex("""^\d{2}:\d{2}$""")
+/**
+ * A time as a person is allowed to type it: two digits, a colon, two digits.
+ *
+ * Stricter than the one the scheduler reads with, and deliberately so. Refusing
+ * `9:00` on the way in keeps one spelling in the database; accepting it on the
+ * way out means the app can still read a row written by an older version or by
+ * the other machine. The two used to share the name HHMM, which is how a
+ * difference that is a decision reads as a difference that is a mistake.
+ */
+internal val HHMM_STRICT = Regex("""^\d{2}:\d{2}$""")
 
 /**
  * The date and time columns, tidied without being reinterpreted.
@@ -175,7 +184,7 @@ fun taskProblems(d: TaskDraft): List<String> {
     }
 
     val time = sanitizeText(d.resetTime)
-    if (time != null && !HHMM.matches(time)) out.add("time-malformed")
+    if (time != null && !HHMM_STRICT.matches(time)) out.add("time-malformed")
 
     if (type == "weekly" || type == "biweekly") {
         val day = num(d.resetDay)

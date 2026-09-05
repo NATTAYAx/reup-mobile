@@ -74,7 +74,10 @@ sealed interface QuietSetting {
 
 private val json = Json { ignoreUnknownKeys = true }
 
-private val HHMM = Regex("""^\d{2}:\d{2}$""")
+// HHMM_STRICT comes from TaskDraft.kt, same package. Quiet hours arrive here
+// as JSON written by the other machine rather than typed by a person, but the
+// spelling a person is allowed to type is exactly the spelling that should have
+// been stored, so it is the same rule and not a second one that looks like it.
 
 /**
  * Read the stored string, tolerating everything a stored string can be.
@@ -100,8 +103,8 @@ fun parseQuiet(raw: String?): QuietSetting {
     // store-vectors.json because this exact line got it wrong first.
     if (enabled.isString || enabled.booleanOrNull != true) return QuietSetting.Off
 
-    val start = (o["start"] as? JsonPrimitive)?.contentOrNull?.takeIf { HHMM.matches(it) }
-    val end = (o["end"] as? JsonPrimitive)?.contentOrNull?.takeIf { HHMM.matches(it) }
+    val start = (o["start"] as? JsonPrimitive)?.contentOrNull?.takeIf { HHMM_STRICT.matches(it) }
+    val end = (o["end"] as? JsonPrimitive)?.contentOrNull?.takeIf { HHMM_STRICT.matches(it) }
     // Switched on but with an unreadable window is not off — somebody asked for
     // quiet and the numbers were lost. Unknown lets each side apply its own
     // default night rather than silently deciding there is none.

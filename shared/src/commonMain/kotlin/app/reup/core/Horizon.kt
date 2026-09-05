@@ -80,7 +80,7 @@ fun horizon(
 ): List<Alarm> {
     if (limit <= 0 || tasks.isEmpty()) return emptyList()
 
-    val quietWindow = quiet?.let(::parseQuiet)
+    val quietWindow = quiet?.let(::quietWindow)
     val out = ArrayList<Alarm>()
 
     // Each task contributes at most `limit` occurrences. Taking the globally
@@ -150,7 +150,13 @@ fun horizon(
 
 private data class QuietWindow(val startMin: Int, val endMin: Int, val wraps: Boolean)
 
-private fun parseQuiet(q: QuietHours): QuietWindow? {
+/**
+ * Named for what it returns rather than what it does, because there is a
+ * different parseQuiet in the sync module that turns stored JSON into a
+ * setting. Two functions with one name across two packages is not a clash the
+ * compiler minds and is one a person does.
+ */
+private fun quietWindow(q: QuietHours): QuietWindow? {
     val s = minutesOfDay(q.start) ?: return null
     val e = minutesOfDay(q.end) ?: return null
     // Equal bounds are ambiguous — zero-length or the entire day, depending on
@@ -160,14 +166,17 @@ private fun parseQuiet(q: QuietHours): QuietWindow? {
     return QuietWindow(s, e, wraps = s > e)
 }
 
-private val HHMM_OF_DAY = Regex("""^(\d{1,2}):(\d{2})$""")
-
+/**
+ * Minutes since midnight, from the same parse the scheduler uses.
+ *
+ * This file used to carry its own regex and its own parser, identical to the
+ * pair in ResetSchedule down to the character. Two copies of one rule about
+ * what a time looks like, in one package, in a project that has spent a month
+ * removing exactly that.
+ */
 private fun minutesOfDay(hhmm: String): Int? {
-    val m = HHMM_OF_DAY.matchEntire(hhmm.trim()) ?: return null
-    val h = m.groupValues[1].toInt()
-    val mi = m.groupValues[2].toInt()
-    if (h > 23 || mi > 59) return null
-    return h * 60 + mi
+    val hm = parseHHMM(hhmm) ?: return null
+    return hm.h * 60 + hm.mi
 }
 
 /**

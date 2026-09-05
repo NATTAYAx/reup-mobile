@@ -91,16 +91,28 @@ fun nextReset(spec: ResetSpec, now: Instant, appZone: TimeZone): Instant? {
 
 // ── internals ────────────────────────────────────────────────────────────────
 
-private data class HM(val h: Int, val mi: Int)
+/** Shared with Horizon, which needs the same parse for quiet hours. */
+internal data class HM(val h: Int, val mi: Int)
 
-private val HHMM = Regex("""^(\d{1,2}):(\d{2})$""")
+/**
+ * A time on a clock face, lenient about a missing leading zero.
+ *
+ * Lenient on purpose, and worth naming as a decision rather than an accident.
+ * This is the pattern used when READING something already stored — a task from
+ * the database, an hour from the settings table — where refusing to understand
+ * `9:00` would mean an app that cannot read its own data. The pattern used when
+ * a person is TYPING a time is stricter and lives beside the form that takes
+ * it, under a name that says so.
+ */
+private val HHMM_ANY = Regex("""^(\d{1,2}):(\d{2})$""")
 private val DATE_ONLY = Regex("""^\d{4}-\d{2}-\d{2}$""")
 private val LOOSE_LOCAL = Regex("""^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$""")
 private val HAS_OFFSET = Regex("""[+-]\d{2}:?\d{2}$""")
 
-private fun parseHHMM(time: String?): HM? {
+/** The one place a wall-clock string becomes numbers. */
+internal fun parseHHMM(time: String?): HM? {
     if (time.isNullOrBlank()) return null
-    val m = HHMM.matchEntire(time.trim()) ?: return null
+    val m = HHMM_ANY.matchEntire(time.trim()) ?: return null
     val h = m.groupValues[1].toInt()
     val mi = m.groupValues[2].toInt()
     if (h > 23 || mi > 59) return null
