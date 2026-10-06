@@ -79,31 +79,47 @@ class HorizonTest {
     }
 
     @Test
-    fun `quiet hours push alarms to the end of the window`() {
-        val result = horizon(all, now, bkk, limit = 8, quiet = QuietHours("23:00", "08:00"))
+    fun `quiet hours keep the time and take the sound`() {
+        val quiet = QuietHours("23:00", "08:00")
+        val result = horizon(all, now, bkk, limit = 8, quiet = quiet)
+        val without = horizon(all, now, bkk, limit = 8)
 
-        // Everything that would have rung between 23:00 and 08:00 now rings at
-        // 08:00 — and, importantly, still rings. An earlier version dropped
-        // these entirely, which meant a daily 04:00 task notified never and
-        // said nothing about why.
-        val shifted = result.filter { it.shiftedOutOfQuiet }
-        assertTrue(shifted.isNotEmpty())
-        assertTrue(shifted.all { it.fireAt > it.resetAt })
+        // Nothing moves. An earlier version dropped these alarms and a later
+        // one pushed them to 08:00, which rang six hours after a 02:00
+        // deadline. Same instants as with no quiet hours at all.
+        assertEquals(without.map { it.taskId to it.fireAt }, result.map { it.taskId to it.fireAt })
 
-        for (alarm in shifted) {
+        // Everything inside the window is silent, and only that.
+        val silent = result.filter { it.silent }
+        assertTrue(silent.isNotEmpty(), "expected something inside 23:00-08:00")
+        for (alarm in result) {
             val wall = wallClock(alarm.fireAt.toEpochMilliseconds(), bkk)
-            assertEquals(8, wall.h)
-            assertEquals(0, wall.mi)
+            val inside = wall.h >= 23 || wall.h < 8
+            assertEquals(inside, alarm.silent, "${alarm.taskId} at ${wall.h}:${wall.mi}")
         }
 
-        // The 09:00 task is outside the window and must be left alone.
-        assertTrue(result.any { it.taskId == "every3d" && !it.shiftedOutOfQuiet })
+        // The 09:00 task is outside the window and rings as ever.
+        assertTrue(result.any { it.taskId == "every3d" && !it.silent })
     }
 
     @Test
-    fun `quiet hours produce ties, and ties are ordered deterministically`() {
-        val a = horizon(all, now, bkk, limit = 20, quiet = QuietHours("23:00", "08:00"))
-        val b = horizon(all.reversed(), now, bkk, limit = 20, quiet = QuietHours("23:00", "08:00"))
+    fun `a task allowed through rings in quiet hours`() {
+        val quiet = QuietHours("23:00", "08:00")
+        val pills = daily04.copy(id = "pills", ringInQuiet = true)
+        val result = horizon(listOf(daily04, pills), now, bkk, limit = 4, quiet = quiet)
+
+        // Both at 04:00 local, inside the window. The one the person marked is
+        // let through; the other is not.
+        assertTrue(result.filter { it.taskId == "daily04" }.all { it.silent })
+        assertTrue(result.filter { it.taskId == "pills" }.none { it.silent })
+    }
+
+    @Test
+    fun `ties are ordered deterministically`() {
+        // Two tasks resetting at the same moment share a fireAt exactly.
+        val tied = all + daily04.copy(id = "daily04b")
+        val a = horizon(tied, now, bkk, limit = 20)
+        val b = horizon(tied.reversed(), now, bkk, limit = 20)
 
         // Same set of tasks in a different order must give an identical queue,
         // or "has the schedule changed since last time" becomes unanswerable

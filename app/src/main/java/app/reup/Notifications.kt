@@ -41,6 +41,14 @@ object Notifications {
 
     const val CHANNEL_RESETS = "resets"
 
+    /**
+     * The quiet-hours twin: in the list, no sound, no vibration, no pop-up -
+     * what every platform's own do-not-disturb does to a notification it lets
+     * in. A channel rather than a flag on the post, because a channel is what
+     * the system lets a person adjust afterwards, and they may well want to.
+     */
+    const val CHANNEL_QUIET = "resets_quiet"
+
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
 
@@ -62,6 +70,19 @@ object Notifications {
         // system keeps whatever the user changed. So this can be called every
         // launch, and a person who turned sound on stays turned on.
         manager.createNotificationChannel(channel)
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_QUIET,
+                "รอบรีเซ็ต · ช่วงเงียบ",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "แจ้งตรงเวลาในช่วงเงียบ แต่ไม่มีเสียง ไม่สั่น"
+                setSound(null, null)
+                enableVibration(false)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            },
+        )
     }
 
     /**
@@ -70,8 +91,17 @@ object Notifications {
      *        database is empty. No uid, no button: a button that ticks nothing
      *        is worse than no button, because it looks like it worked.
      */
-    fun post(context: Context, id: Int, title: String, body: String, taskId: String? = null) {
+    fun post(
+        context: Context,
+        id: Int,
+        title: String,
+        body: String,
+        taskId: String? = null,
+        silent: Boolean = false,
+    ) {
         val manager = context.getSystemService(NotificationManager::class.java)
+        // Decided when the queue was built, not here - see Horizon.insideQuiet.
+        val channelId = if (silent) CHANNEL_QUIET else CHANNEL_RESETS
 
         val open = PendingIntent.getActivity(
             context,
@@ -84,13 +114,13 @@ object Notifications {
         // What a locked screen is allowed to show. Without this the system
         // redacts to a generic app-name line, which is fine but says less than
         // it could.
-        val redacted = Notification.Builder(context, CHANNEL_RESETS)
+        val redacted = Notification.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notify)
             .setContentTitle("มีบางอย่างถึงรอบแล้ว")
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
 
-        val builder = Notification.Builder(context, CHANNEL_RESETS)
+        val builder = Notification.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notify)
             .setContentTitle(title)
             .setContentText(body)

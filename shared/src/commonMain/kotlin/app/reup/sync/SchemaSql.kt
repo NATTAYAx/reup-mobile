@@ -407,4 +407,12 @@ const val SCHEMA_SQL: String =
     "ALTER TABLE expected_income ADD COLUMN updated_at TEXT;\n" +
     "-- @@\n" +
     "ALTER TABLE tasks ADD COLUMN notify_before_min INTEGER;\n" +
+    "-- @@\n" +
+    "-- Allowed to ring through quiet hours, and only at its last call: the final\n" +
+    "-- ten-minute warning, or the one reminder when the notice window is that short\n" +
+    "-- anyway. Quiet hours otherwise show a reminder without a sound. Set by the\n" +
+    "-- person on the task, in advance, the way an alarm is - never inferred from\n" +
+    "-- is_urgent, which answers how important a thing is and not whether it is worth\n" +
+    "-- waking somebody for. See lib/chime.ts.\n" +
+    "ALTER TABLE tasks ADD COLUMN ring_in_quiet INTEGER NOT NULL DEFAULT 0;\n" +
     "-- @@\n"

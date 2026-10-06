@@ -25,6 +25,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import app.reup.core.DEFAULT_PALETTE
 import app.reup.core.Palette
+import app.reup.core.THEMES
 import app.reup.core.paletteOf
 
 /**
@@ -110,15 +111,18 @@ object Ui {
      * screen that starts in one theme and repaints into another a moment later
      * is worse than a screen with no choice at all.
      *
-     * WHY IT DOES NOT SYNC
+     * IT SYNCS NOW, AND THIS IS STILL THE COPY THE SCREEN READS
      *
-     * It could — user_settings is right there and currency and language ride in
-     * it. It does not, because the desktop keeps its own theme in localStorage
-     * as a whole palette object, and half of a shared setting is worse than
-     * none: the phone would overwrite a palette the desktop worked out from its
-     * wallpaper. Putting both on one key is a desktop round, and this is not
-     * it. The cost meanwhile is that the choice does not survive a reinstall,
-     * which for a colour is a shrug.
+     * The note that used to be here said the theme could not sync because the
+     * desktop kept a whole palette object, and half a shared setting is worse
+     * than none. That round has happened: what crosses is the id, and each
+     * machine looks up its own colours under that name, so the palette the
+     * desktop works out from a wallpaper video stays where it belongs.
+     *
+     * This is still where the screen reads from, for the reason above. The row
+     * is the truth and this is the copy that can answer instantly; [adopt] is
+     * what brings the copy in line, and it runs after a sync rather than during
+     * a layout pass.
      */
     fun load(ctx: Context) {
         palette = paletteOf(
@@ -134,6 +138,31 @@ object Ui {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_THEME, id).apply()
         palette = paletteOf(id)
+    }
+
+    /**
+     * Take the theme the other machine picked, if it named one this build has.
+     *
+     * Returns whether anything moved, so the caller can rebuild its views. It
+     * has to rebuild them: a colour is read once, when a view is made, which is
+     * the same reason picking a theme on this screen calls recreate().
+     *
+     * THE ONE RULE
+     *
+     * An id this build does not know is not a change this build can make.
+     *
+     * The desktop stores a palette it worked out from a wallpaper video under
+     * the id "custom", which means something there and nothing here. Falling
+     * back to the default for a name this build does not have would turn that
+     * into the phone flipping to violet - not because anybody picked violet,
+     * but because somebody picked a colour on a machine this one cannot
+     * follow. The same holds for whatever a later version adds, either way.
+     */
+    fun adopt(ctx: Context, id: String?): Boolean {
+        if (id == null || THEMES.none { it.id == id }) return false
+        if (id == themeId(ctx)) return false
+        setTheme(ctx, id)
+        return true
     }
 
     // ─── scale ──────────────────────────────────────────────────────────────

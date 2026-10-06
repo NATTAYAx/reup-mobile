@@ -40,6 +40,7 @@ val TASK_COLUMNS: List<String> = listOf(
     "notify_before_min",
     "time_zone",
     "intent",
+    "ring_in_quiet",
 )
 
 /** The reset types the engine knows how to schedule. */
@@ -86,6 +87,8 @@ data class TaskDraft(
     val notifyBeforeMin: String? = null,
     val timeZone: String? = null,
     val intent: String? = null,
+    /** May ring through quiet hours. Last, so nothing positional moves. */
+    val ringInQuiet: Boolean = false,
 )
 
 private val UTC_MS = Regex("""^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z$""")
@@ -138,7 +141,7 @@ private fun num(v: String?): Double? {
     return v.trim().toDoubleOrNull()
 }
 
-/** The seventeen values, in [TASK_COLUMNS] order. */
+/** The values, in [TASK_COLUMNS] order. */
 fun taskValues(d: TaskDraft): List<SyncValue> {
     fun text(s: String?): SyncValue = if (s == null) SyncValue.Null else SyncValue.Text(s)
     fun number(n: Double?): SyncValue = if (n == null) SyncValue.Null else SyncValue.Num(n)
@@ -160,6 +163,7 @@ fun taskValues(d: TaskDraft): List<SyncValue> {
         number(num(d.notifyBeforeMin)),
         text(sanitizeText(d.timeZone)),
         if (d.intent == "want" || d.intent == "must") SyncValue.Text(d.intent) else SyncValue.Null,
+        SyncValue.Num(if (d.ringInQuiet) 1.0 else 0.0),
     )
 }
 
@@ -256,6 +260,7 @@ val TASK_EDITABLE: Map<String, String> = linkedMapOf(
     "notify_before_min" to "int",
     "time_zone" to "clean",
     "intent" to "intent",
+    "ring_in_quiet" to "flag",
 )
 
 private fun coerce(how: String, v: String?): SyncValue = when (how) {

@@ -42,6 +42,36 @@ const val KEY_CURRENCY = "gamesched_currency"
 const val KEY_LANG = "gamesched_lang_v1"
 
 /**
+ * Which theme, by id.
+ *
+ * Only the id crosses. The two machines hold different colour fields under the
+ * same six names - this side needs a card, a raised surface, a field and an ink
+ * colour for text on the primary, which on three themes is black because white
+ * failed the contrast test in Palette.kt; the desktop needs a gradient and a
+ * border alpha and has no equivalent of that test. Sending either side's
+ * palette to the other loses half of it or carries colours nobody checked.
+ *
+ * So each machine looks up its own colours under a shared name, and the ids are
+ * pinned by store-vectors.json like every other string two languages have to
+ * spell identically. The rule for reading one is in Ui.adopt: an id this build
+ * does not know is not a change this build can make.
+ */
+const val KEY_THEME = "gamesched_theme_id_v1"
+
+/**
+ * The write both machines make into user_settings.
+ *
+ * The WHERE is the part that matters. Without it, storing a value that is
+ * already there still bumps updated_at, fires the outbox trigger and puts a row
+ * on the wire - every time, on both devices, for ever. Held to the desktop's
+ * copy by the settingQueries vector.
+ */
+const val SETTING_UPSERT_SQL =
+    "INSERT INTO user_settings (key, value) VALUES (?, ?) " +
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value " +
+            "WHERE user_settings.value IS NOT excluded.value"
+
+/**
  * One live setting by name.
  *
  * `deleted = 0` because a tombstone is a key that was retired, not a key set to
@@ -121,4 +151,5 @@ object UserSettings {
     const val QUIET = KEY_QUIET
     const val CURRENCY = KEY_CURRENCY
     const val LANG = KEY_LANG
+    const val THEME = KEY_THEME
 }

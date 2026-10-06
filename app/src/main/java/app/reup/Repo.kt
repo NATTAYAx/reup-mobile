@@ -117,6 +117,14 @@ object Repo {
      *
      * Null means no quiet hours, which [Horizon] already takes as its default.
      */
+    /** The theme the settings row names, or null. Ui.adopt decides what to do. */
+    suspend fun themeId(ctx: Context): String? = open(ctx).themeId()
+
+    /** Say which theme this phone is on, so the other machine can follow. */
+    suspend fun setThemeId(ctx: Context, id: String) {
+        open(ctx).setThemeId(id)
+    }
+
     suspend fun quietHours(ctx: Context): QuietHours? = when (val q = open(ctx).quietSetting()) {
         QuietSetting.Unknown -> DEFAULT_QUIET
         QuietSetting.Off -> null

@@ -12,6 +12,7 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 import kotlin.test.Test
+import app.reup.core.THEMES
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -303,6 +304,7 @@ class StoreTest {
                 minStep = s("min_step"),
                 timeZone = s("time_zone"),
                 intent = s("intent"),
+                ringInQuiet = b("ring_in_quiet"),
             )
             val label = s("name") + "/" + s("reset_type")
 
@@ -447,6 +449,65 @@ class StoreTest {
         assertEquals(
             cases("moneyFallbacks").map { it.jsonPrimitive.content },
             listOf(CURRENCY_FALLBACK, CATEGORY_FALLBACK),
+        )
+    }
+
+    @Test
+    fun `both machines spell the setting keys the same way`() {
+        // These are rows in app_settings and user_settings, looked up by name
+        // from both sides. A spelling that disagrees throws nothing and logs
+        // nothing: one device writes a row the other never reads, so the
+        // setting simply has no effect on the machine that did not write it —
+        // quiet hours that apply to one device, a currency that reverts, a sync
+        // config the phone cannot find.
+        //
+        // Three of the six had two declarations on the desktop alone before
+        // this vector existed. They agreed. Nothing was making them.
+        assertEquals(
+            cases("settingKeys").map { it.jsonPrimitive.content },
+            listOf(
+                KEY_QUIET,
+                KEY_CURRENCY,
+                KEY_LANG,
+                SYNC_CONFIG_KEY,
+                SYNC_TOKENS_KEY,
+                SYNC_STATE_KEY,
+                KEY_THEME,
+            ),
+        )
+    }
+
+    @Test
+    fun `names the same six themes as the desktop, in the same order`() {
+        // The colours are not shared and are not meant to be: this side needs a
+        // card, a raised surface, a field and an ink colour for text on the
+        // primary; the desktop needs a gradient and a border alpha. What both
+        // sides must spell identically is which theme is called what, because
+        // that string is the whole of what crosses.
+        //
+        // An id spelled differently on one side does not throw. The theme is
+        // picked, the row travels, the other machine reads a name it does not
+        // have and correctly leaves itself alone - so that one theme silently
+        // stops syncing while the other five keep working.
+        //
+        // Order too, because it is the order of the picker on both machines.
+        assertEquals(
+            cases("themeIds").map { it.jsonPrimitive.content },
+            THEMES.map { it.id },
+        )
+    }
+
+    @Test
+    fun `writes a setting with the same upsert as the desktop`() {
+        // The WHERE is the half worth holding. Without it, storing a value that
+        // is already there still bumps updated_at, fires the outbox trigger and
+        // puts a row on the wire - every time, on both devices, for ever. A
+        // phone that wrote the plain upsert would look like it was working
+        // while quietly filling the folder.
+        fun flat(s: String) = s.split(Regex("\\s+")).joinToString(" ").trim()
+        assertEquals(
+            cases("settingQueries").map { flat(it.jsonPrimitive.content) },
+            listOf(flat(SETTING_UPSERT_SQL)),
         )
     }
 

@@ -55,6 +55,7 @@ class TaskRepoTest {
         "time_zone",
         "notify_before_min",
         "paused_until",
+        "ring_in_quiet",
         "is_active",
         "deleted",
     )

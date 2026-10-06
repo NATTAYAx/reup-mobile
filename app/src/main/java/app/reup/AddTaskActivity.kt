@@ -74,6 +74,7 @@ class AddTaskActivity : Activity() {
     private lateinit var dayRow: LinearLayout
     private lateinit var typeRow: LinearLayout
     private lateinit var flagRow: LinearLayout
+    private lateinit var wakeRow: LinearLayout
     private lateinit var saveButton: Button
     private lateinit var deleteButton: Button
     private lateinit var status: TextView
@@ -86,6 +87,7 @@ class AddTaskActivity : Activity() {
     private var day = 1
     private var priority = false
     private var urgent = false
+    private var wake = false
     private var busy = false
 
     /**
@@ -174,6 +176,15 @@ class AddTaskActivity : Activity() {
         flagRow.addView(star, Ui.cell(this, true))
         flagRow.addView(fire, Ui.cell(this))
 
+        // A row of its own, because it is not a third kind of importance. It
+        // answers whether this may wake somebody, which is the desktop's
+        // tasks.ring_in_quiet and the same column.
+        val bell = Ui.chip(this, "") { wake = !wake; armed = false; render() }
+        flagChips.add(bell)
+        wakeRow = LinearLayout(this)
+        wakeRow.orientation = LinearLayout.HORIZONTAL
+        wakeRow.addView(bell, Ui.cell(this, true))
+
         saveButton = Ui.primary(this, "บันทึก") { save() }
         // Outlined rather than filled. A red slab is the loudest thing on any
         // screen it is on, and this is never why this screen was opened.
@@ -199,6 +210,7 @@ class AddTaskActivity : Activity() {
         column.addView(dateRow, rowParams())
         column.addView(label("ทำเครื่องหมาย"), rowParams())
         column.addView(flagRow, rowParams())
+        column.addView(wakeRow, rowParams())
         column.addView(status, rowParams())
         // Only when there is something to delete, and nowhere near the save
         // button: the thing being reached for on this screen is almost always
@@ -240,6 +252,7 @@ class AddTaskActivity : Activity() {
                 day = fields["reset_day"]?.toIntOrNull() ?: 1
                 priority = fields["is_priority"] == "1"
                 urgent = fields["is_urgent"] == "1"
+                wake = fields["ring_in_quiet"] == "1"
                 // A task made on the desktop can be a kind this screen has no
                 // chip for. Showing it as something else would be a lie that
                 // saving would then make true.
@@ -291,6 +304,8 @@ class AddTaskActivity : Activity() {
         flagChips[1].text = if (urgent) "🔥 ด่วน" else "ด่วน"
         Ui.select(this, flagChips[0], priority)
         Ui.select(this, flagChips[1], urgent)
+        flagChips[2].text = if (wake) "🔔 ดังได้ในช่วงเงียบ" else "ดังได้ในช่วงเงียบ"
+        Ui.select(this, flagChips[2], wake)
 
         val weekly = type == "weekly" || type == "biweekly"
         dayRow.visibility = if (weekly) LinearLayout.VISIBLE else LinearLayout.GONE
@@ -322,6 +337,7 @@ class AddTaskActivity : Activity() {
         specificDate = if (type == "specific_date") dateBox.text.toString().trim() else null,
         isPriority = priority,
         isUrgent = urgent,
+        ringInQuiet = wake,
     )
 
     /**
@@ -343,6 +359,7 @@ class AddTaskActivity : Activity() {
             "specific_date" to d.specificDate,
             "is_priority" to if (d.isPriority) "1" else "0",
             "is_urgent" to if (d.isUrgent) "1" else "0",
+            "ring_in_quiet" to if (d.ringInQuiet) "1" else "0",
         )
         // Every key here is in TASK_EDITABLE, and this is where that stops
         // being a thing to remember. A typo above becomes a column that is

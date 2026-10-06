@@ -863,7 +863,8 @@
     "min_step",
     "notify_before_min",
     "time_zone",
-    "intent"
+    "intent",
+    "ring_in_quiet"
   ],
   "taskEditable": [
     "name",
@@ -883,9 +884,21 @@
     "min_step",
     "notify_before_min",
     "time_zone",
-    "intent"
+    "intent",
+    "ring_in_quiet"
   ],
   "taskUpdate": [
+    {
+      "fields": {
+        "ring_in_quiet": 1
+      },
+      "columns": [
+        "ring_in_quiet"
+      ],
+      "values": [
+        1
+      ]
+    },
     {
       "fields": {},
       "columns": [],
@@ -1089,7 +1102,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": []
     },
@@ -1115,7 +1129,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "name-empty"
@@ -1143,7 +1158,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "name-empty"
@@ -1174,7 +1190,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": []
     },
@@ -1201,7 +1218,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": []
     },
@@ -1227,7 +1245,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "weekly-needs-day"
@@ -1256,7 +1275,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "day-out-of-range"
@@ -1285,7 +1305,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": []
     },
@@ -1313,7 +1334,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": []
     },
@@ -1339,7 +1361,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "custom-needs-interval"
@@ -1368,7 +1391,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "interval-out-of-range"
@@ -1398,7 +1422,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": []
     },
@@ -1425,7 +1450,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "event-needs-window"
@@ -1454,7 +1480,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": []
     },
@@ -1480,7 +1507,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "date-missing"
@@ -1508,7 +1536,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "reset-type-unknown"
@@ -1537,7 +1566,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": [
         "time-malformed"
@@ -1566,7 +1596,8 @@
         null,
         null,
         null,
-        "want"
+        "want",
+        0
       ],
       "problems": []
     },
@@ -1593,7 +1624,8 @@
         null,
         null,
         null,
-        null
+        null,
+        0
       ],
       "problems": []
     },
@@ -1622,7 +1654,38 @@
         null,
         null,
         null,
-        null
+        null,
+        0
+      ],
+      "problems": []
+    },
+    {
+      "draft": {
+        "name": "pills",
+        "reset_type": "daily",
+        "reset_time": "02:00",
+        "ring_in_quiet": 1,
+        "category": "personal"
+      },
+      "values": [
+        "pills",
+        "",
+        "personal",
+        "daily",
+        "02:00",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        null,
+        null,
+        null,
+        null,
+        1
       ],
       "problems": []
     },
@@ -1650,7 +1713,8 @@
         null,
         null,
         "Asia/Bangkok",
-        null
+        null,
+        0
       ],
       "problems": []
     }
@@ -2339,6 +2403,26 @@
     "THB",
     "other"
   ],
+  "settingKeys": [
+    "gamesched_quiet_hours_v1",
+    "gamesched_currency",
+    "gamesched_lang_v1",
+    "sync_config_v1",
+    "sync_google_tokens",
+    "sync_state_v1",
+    "gamesched_theme_id_v1"
+  ],
+  "themeIds": [
+    "violet",
+    "ocean",
+    "forest",
+    "ember",
+    "rose",
+    "quiet"
+  ],
+  "settingQueries": [
+    "INSERT INTO user_settings (key, value) VALUES (?, ?)\n   ON CONFLICT(key) DO UPDATE SET value = excluded.value\n    WHERE user_settings.value IS NOT excluded.value"
+  ],
   "shapes": [
     {
       "name": "tasks",
@@ -2372,7 +2456,8 @@
         "uid",
         "updated_at",
         "deleted",
-        "notify_before_min"
+        "notify_before_min",
+        "ring_in_quiet"
       ],
       "types": {
         "id": "INTEGER",
@@ -2404,7 +2489,8 @@
         "uid": "TEXT",
         "updated_at": "TEXT",
         "deleted": "INTEGER",
-        "notify_before_min": "INTEGER"
+        "notify_before_min": "INTEGER",
+        "ring_in_quiet": "INTEGER"
       },
       "hasDeleted": true,
       "naturalKeys": [],
@@ -2434,7 +2520,8 @@
         "min_step",
         "paused_until",
         "deleted_at",
-        "notify_before_min"
+        "notify_before_min",
+        "ring_in_quiet"
       ]
     },
     {
@@ -2790,7 +2877,8 @@
           "min_step": null,
           "paused_until": null,
           "deleted_at": null,
-          "notify_before_min": null
+          "notify_before_min": null,
+          "ring_in_quiet": null
         }
       }
     },
@@ -2841,7 +2929,8 @@
           "min_step": null,
           "paused_until": null,
           "deleted_at": null,
-          "notify_before_min": null
+          "notify_before_min": null,
+          "ring_in_quiet": null
         }
       }
     },
@@ -2892,7 +2981,8 @@
           "min_step": null,
           "paused_until": null,
           "deleted_at": null,
-          "notify_before_min": null
+          "notify_before_min": null,
+          "ring_in_quiet": null
         }
       }
     }
@@ -2921,7 +3011,7 @@
         }
       },
       "expected": {
-        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at, notify_before_min) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at, notify_before_min = excluded.notify_before_min",
+        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at, notify_before_min, ring_in_quiet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at, notify_before_min = excluded.notify_before_min, ring_in_quiet = excluded.ring_in_quiet",
         "params": [
           "11111111-1111-4111-8111-111111111111",
           "2026-08-15T09:00:00.000Z",
@@ -2940,6 +3030,7 @@
           0,
           1,
           1,
+          null,
           null,
           null,
           null,
@@ -2978,7 +3069,7 @@
         }
       },
       "expected": {
-        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at, notify_before_min) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at, notify_before_min = excluded.notify_before_min",
+        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at, notify_before_min, ring_in_quiet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at, notify_before_min = excluded.notify_before_min, ring_in_quiet = excluded.ring_in_quiet",
         "params": [
           "11111111-1111-4111-8111-111111111111",
           "2026-08-15T09:00:00.000Z",
@@ -2997,6 +3088,7 @@
           0,
           1,
           1,
+          null,
           null,
           null,
           null,
@@ -3036,7 +3128,7 @@
         }
       },
       "expected": {
-        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at, notify_before_min) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at, notify_before_min = excluded.notify_before_min",
+        "sql": "INSERT INTO tasks (uid, updated_at, deleted, name, description, category, reset_type, reset_time, reset_day, reset_interval_days, anchor_date, event_start, event_end, specific_date, is_priority, is_urgent, is_active, completed_until, completed_at, created_at, notes, time_zone, intent, cycle_checked_until, missed_streak, min_step, paused_until, deleted_at, notify_before_min, ring_in_quiet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, name = excluded.name, description = excluded.description, category = excluded.category, reset_type = excluded.reset_type, reset_time = excluded.reset_time, reset_day = excluded.reset_day, reset_interval_days = excluded.reset_interval_days, anchor_date = excluded.anchor_date, event_start = excluded.event_start, event_end = excluded.event_end, specific_date = excluded.specific_date, is_priority = excluded.is_priority, is_urgent = excluded.is_urgent, is_active = excluded.is_active, completed_until = excluded.completed_until, completed_at = excluded.completed_at, created_at = excluded.created_at, notes = excluded.notes, time_zone = excluded.time_zone, intent = excluded.intent, cycle_checked_until = excluded.cycle_checked_until, missed_streak = excluded.missed_streak, min_step = excluded.min_step, paused_until = excluded.paused_until, deleted_at = excluded.deleted_at, notify_before_min = excluded.notify_before_min, ring_in_quiet = excluded.ring_in_quiet",
         "params": [
           "11111111-1111-4111-8111-111111111111",
           "2026-08-15T09:00:00.000Z",
@@ -3055,6 +3147,7 @@
           0,
           1,
           1,
+          null,
           null,
           null,
           null,

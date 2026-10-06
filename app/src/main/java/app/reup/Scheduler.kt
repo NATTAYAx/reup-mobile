@@ -52,7 +52,7 @@ object Scheduler {
 
     const val EXTRA_TASK_ID = "task_id"
     const val EXTRA_RESET_AT = "reset_at"
-    const val EXTRA_SHIFTED = "shifted"
+    const val EXTRA_SILENT = "silent"
     const val EXTRA_TEST = "test"
 
     /**
@@ -99,7 +99,7 @@ object Scheduler {
             val intent = Intent(context, AlarmReceiver::class.java).apply {
                 putExtra(EXTRA_TASK_ID, alarm.taskId)
                 putExtra(EXTRA_RESET_AT, alarm.resetAt.toEpochMilliseconds())
-                putExtra(EXTRA_SHIFTED, alarm.shiftedOutOfQuiet)
+                putExtra(EXTRA_SILENT, alarm.silent)
             }
 
             val pending = PendingIntent.getBroadcast(
