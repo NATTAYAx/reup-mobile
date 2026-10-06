@@ -214,3 +214,35 @@ private fun insideQuiet(at: Instant, w: QuietWindow, zone: TimeZone): Boolean {
     return if (w.wraps) minute >= w.startMin || minute < w.endMin
     else minute >= w.startMin && minute < w.endMin
 }
+// ── this device ──────────────────────────────────────────────────────────────
+
+/**
+ * Which reminders this phone gives.
+ *
+ * Stays on the phone and never syncs, because it answers a question about the
+ * device in somebody's hand rather than about the person: "not on the phone
+ * tonight, the computer is enough" must not reach over and quiet the computer.
+ * The desktop's sound switch stays on the desktop for the same reason. What is
+ * about the person - quiet hours, which task may wake them - does sync.
+ */
+enum class DeviceNotify(val id: String) {
+    /** Vibrates as usual; quiet hours and ring_in_quiet apply. */
+    ON("on"),
+    /** Everything goes in the shade, nothing vibrates. */
+    SILENT("silent"),
+    /** Nothing is registered with the system at all. Tasks still sync. */
+    OFF("off");
+
+    companion object {
+        /** Anything unrecognised is ON: the failure that silences reminders
+         *  nobody asked to silence is the worse one to pick. */
+        fun parse(s: String?): DeviceNotify = entries.firstOrNull { it.id == s } ?: ON
+    }
+}
+
+/** The queue as this device will actually register it. */
+fun applyDeviceNotify(alarms: List<Alarm>, mode: DeviceNotify): List<Alarm> = when (mode) {
+    DeviceNotify.ON -> alarms
+    DeviceNotify.SILENT -> alarms.map { if (it.silent) it else it.copy(silent = true) }
+    DeviceNotify.OFF -> emptyList()
+}

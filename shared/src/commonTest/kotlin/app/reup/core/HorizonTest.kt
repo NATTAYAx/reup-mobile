@@ -184,4 +184,23 @@ class HorizonTest {
         // added, this is what would break.
         assertTrue(result.any { it.taskId == "rare" })
     }
+
+    @Test
+    fun `this phone can be told to be silent or to stay out of it`() {
+        val q = horizon(all, now, bkk, limit = 8)
+        assertEquals(q, applyDeviceNotify(q, DeviceNotify.ON))
+        val silent = applyDeviceNotify(q, DeviceNotify.SILENT)
+        assertTrue(silent.all { it.silent })
+        // Silent changes how it arrives, never when.
+        assertEquals(q.map { it.fireAt }, silent.map { it.fireAt })
+        assertTrue(applyDeviceNotify(q, DeviceNotify.OFF).isEmpty())
+    }
+
+    @Test
+    fun `a saved mode this build does not know reads as on`() {
+        assertEquals(DeviceNotify.ON, DeviceNotify.parse(null))
+        assertEquals(DeviceNotify.ON, DeviceNotify.parse("loud"))
+        assertEquals(DeviceNotify.OFF, DeviceNotify.parse("off"))
+        assertEquals(DeviceNotify.SILENT, DeviceNotify.parse("silent"))
+    }
 }
