@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import app.reup.core.applyDeviceNotify
 import app.reup.core.horizon
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -87,12 +88,18 @@ object Scheduler {
             }
         }
 
-        val alarms = horizon(
-            tasks = tasks,
-            now = now,
-            appZone = zone,
-            limit = SLOTS,
-            quiet = quiet,
+        // Then what this phone was told to do with them. OFF registers nothing
+        // at all - every slot was cancelled above - which is the point: a
+        // phone told to stay out of it must not be woken in order to stay quiet.
+        val alarms = applyDeviceNotify(
+            horizon(
+                tasks = tasks,
+                now = now,
+                appZone = zone,
+                limit = SLOTS,
+                quiet = quiet,
+            ),
+            DeviceNotifyPrefs.get(context),
         )
 
         alarms.forEachIndexed { slot, alarm ->
@@ -132,7 +139,7 @@ object Scheduler {
      *
      * Not debug scaffolding to delete later — this is the only practical way to
      * find out whether the pipeline survives the phone being locked, idle, or
-     * asleep, and later whether Samsung's battery manager has quietly stopped
+     * asleep, and later whether the phone's battery manager has quietly stopped
      * it. Waiting until 04:00 to learn that is a bad way to learn it.
      */
     /** For the home screen, which has to say when reminders will be late. */

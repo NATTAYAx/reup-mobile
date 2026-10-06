@@ -18,12 +18,15 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import app.reup.core.Alarm
+import app.reup.core.DeviceNotify
 import app.reup.core.HomeRow
 import app.reup.core.HomeSection
 import app.reup.core.QuietHours
 import app.reup.core.ScheduledTask
 import app.reup.core.SetupWarning
 import app.reup.core.THEMES
+import app.reup.core.applyDeviceNotify
+import app.reup.core.brandPowerFor
 import app.reup.core.clockOf
 import app.reup.core.headerDate
 import app.reup.core.homeOrder
@@ -114,6 +117,8 @@ class MainActivity : Activity() {
     private lateinit var listBox: LinearLayout
     private lateinit var syncLine: TextView
     private lateinit var themeBox: LinearLayout
+    private lateinit var notifyBox: LinearLayout
+    private lateinit var notifyNote: TextView
     private lateinit var detailsToggle: Button
     private lateinit var detailsCard: LinearLayout
     private lateinit var status: TextView
@@ -212,11 +217,22 @@ class MainActivity : Activity() {
         syncLine.setTextColor(Ui.FAINT)
         column.addView(syncLine, Ui.row(this, 10f))
 
+        // ── which reminders this phone gives ────────────────────────────────
+        // A question about devices, so each device answers it and the answer
+        // never syncs: turning this phone off does not turn the computer off.
+        column.addView(Ui.label(this, "การเตือนบนเครื่องนี้"), Ui.row(this, 24f))
+        notifyBox = Ui.strip(this)
+        column.addView(notifyBox, Ui.row(this, 10f))
+        notifyNote = Ui.note(this, "")
+        notifyNote.setTextColor(Ui.FAINT)
+        column.addView(notifyNote, Ui.row(this, 6f))
+
         // ── the colours ─────────────────────────────────────────────────────
         column.addView(Ui.label(this, "หน้าตา"), Ui.row(this, 24f))
         themeBox = Ui.column(this)
         column.addView(themeBox, Ui.row(this, 10f))
         drawThemes()
+        drawDeviceNotify()
 
         // ── the panel this screen used to be ────────────────────────────────
         detailsToggle = Ui.quiet(this, DETAILS_SHUT) { toggleDetails() }
@@ -643,6 +659,45 @@ class MainActivity : Activity() {
         }
     }
 
+    // ─── which reminders this phone gives ───────────────────────────────────
+
+    private fun drawDeviceNotify() {
+        notifyBox.removeAllViews()
+        val current = DeviceNotifyPrefs.get(this)
+        val choices = listOf(
+            DeviceNotify.ON to "ปกติ",
+            DeviceNotify.SILENT to "เงียบ",
+            DeviceNotify.OFF to "ปิด",
+        )
+        for ((index, choice) in choices.withIndex()) {
+            val chip = Ui.chip(this, choice.second) { setDeviceNotify(choice.first) }
+            Ui.select(this, chip, choice.first == current)
+            notifyBox.addView(chip, Ui.cell(this, index == 0))
+        }
+        notifyNote.text = when (current) {
+            DeviceNotify.ON -> "สั่นตามปกติ ในช่วงเงียบขึ้นแบบไม่สั่น"
+            DeviceNotify.SILENT -> "ขึ้นในแถบแจ้งเตือนทุกครั้ง แต่ไม่สั่นเลย"
+            DeviceNotify.OFF -> "ไม่เตือนบนเครื่องนี้ งานยังซิงก์ คอมยังเตือนตามปกติ"
+        }
+    }
+
+    private fun setDeviceNotify(mode: DeviceNotify) {
+        if (mode == DeviceNotifyPrefs.get(this)) return
+        DeviceNotifyPrefs.set(this, mode)
+        drawDeviceNotify()
+        drawWarnings()
+        // The queue the system holds has to change now rather than at the next
+        // alarm: off means nothing may fire, and an alarm already registered
+        // would.
+        scope.launch {
+            try {
+                Scheduler.reschedule(this@MainActivity)
+            } catch (e: Exception) {
+                // The next resume reschedules anyway.
+            }
+        }
+    }
+
     // ─── what the phone is doing to itself ──────────────────────────────────
 
     /**
@@ -660,6 +715,8 @@ class MainActivity : Activity() {
                     channel.importance != NotificationManager.IMPORTANCE_NONE,
             batteryExempt = pm.isIgnoringBatteryOptimizations(packageName),
             exactAllowed = Scheduler.exactAllowed(this),
+            hibernationExempt = hibernationExempt(),
+            deviceOff = DeviceNotifyPrefs.get(this) == DeviceNotify.OFF,
         )
 
         warnBox.removeAllViews()
@@ -680,15 +737,30 @@ class MainActivity : Activity() {
                     "เปิด",
                 ) { openNotificationSettings() }
 
-                // Not a warning for its own sake. On this vendor's software an
-                // app left alone for a few days is put to sleep and its alarms
-                // stop, and nothing tells the person that happened.
+                // Not a warning for its own sake: a battery manager that stops
+                // waking the app stops its alarms with it, and nothing tells the
+                // person. Named for the phone it is actually on - this used to
+                // say Samsung on every phone.
                 SetupWarning.BATTERY_MANAGED -> Ui.banner(
                     this,
-                    "ซัมซุงอาจพักแอปเองหลังไม่ได้เปิดไม่กี่วัน แล้วการเตือนจะเงียบโดยไม่มีอะไรบอก",
+                    batteryWarning(),
                     Ui.WARN,
                     "แก้",
                 ) { openBatterySettings() }
+
+                SetupWarning.HIBERNATION -> Ui.banner(
+                    this,
+                    "Android อาจพักแอปนี้ถ้าไม่ได้เปิดนาน แล้วการเตือนจะหยุดไปเฉย ๆ",
+                    Ui.WARN,
+                    "ปิดการพัก",
+                ) { openHibernationSettings() }
+
+                SetupWarning.DEVICE_OFF -> Ui.banner(
+                    this,
+                    "ปิดการเตือนบนเครื่องนี้อยู่ งานยังซิงก์ตามปกติ",
+                    Ui.WARN,
+                    "เปิด",
+                ) { setDeviceNotify(DeviceNotify.ON) }
 
                 SetupWarning.INEXACT_ALARMS -> Ui.banner(
                     this,
@@ -733,6 +805,7 @@ class MainActivity : Activity() {
 
         val sb = StringBuilder()
         sb.append("theme    ").append(Ui.palette.id).append("\n")
+        sb.append("เครื่องนี้  ").append(DeviceNotifyPrefs.get(this).id).append("\n")
         sb.append("zone     ").append(zone.toString()).append("\n")
         sb.append("now      ").append(stamp(now, zone)).append("\n")
         // Printed from the same value the scheduler used, so the queue below and
@@ -745,18 +818,34 @@ class MainActivity : Activity() {
         sb.append("- สถานะที่มีผลกับการเตือน -\n")
         sb.append(mark(notificationsOn)).append(" อนุญาตแจ้งเตือน\n")
         sb.append(mark(channelOn)).append(" ช่องรอบรีเซ็ตเปิดอยู่\n")
-        sb.append(mark(batteryExempt)).append(" ยกเว้นการประหยัดแบต\n")
+        // "Android's layer" because on several brands it is not the only one,
+        // and a green line here used to read as "nothing will stop this".
+        sb.append(mark(batteryExempt)).append(" ยกเว้นการประหยัดแบต (ชั้นของ Android)\n")
+        sb.append(mark(hibernationExempt())).append(" ไม่ถูกพักเมื่อไม่ได้ใช้\n")
         sb.append(mark(Scheduler.exactAllowed(this))).append(" เตือนตรงเวลา\n\n")
 
-        sb.append("- คิวที่ส่งให้ระบบแล้ว (").append(alarms.size).append(") -\n")
-        if (alarms.isEmpty()) {
+        // The layer this app cannot see, said as such rather than marked.
+        val power = brandPowerFor(Build.MANUFACTURER ?: "", Build.BRAND ?: "")
+        if (power != null) {
+            sb.append("- ตัวจัดการแบตของ ").append(power.brand).append(" -\n")
+            sb.append("แอปมองชั้นนี้ไม่เห็น เลยบอกไม่ได้ว่าตั้งไว้แล้วรึยัง\n")
+            sb.append("ค้นในตั้งค่า:\n")
+            for (step in power.steps) sb.append("· ").append(step).append("\n")
+            sb.append("เส้นทางเมนูล่าสุด ").append(power.guide).append("\n\n")
+        } else {
+            sb.append("บางยี่ห้อมีตัวจัดการแบตของตัวเองอีกชั้น ดู dontkillmyapp.com\n\n")
+        }
+
+        val queued = applyDeviceNotify(alarms, DeviceNotifyPrefs.get(this))
+        sb.append("- คิวที่ส่งให้ระบบแล้ว (").append(queued.size).append(") -\n")
+        if (queued.isEmpty()) {
             sb.append("(ว่าง)\n")
         } else {
-            for (alarm in alarms) {
+            for (alarm in queued) {
                 val label = labels[alarm.taskId] ?: alarm.taskId
                 sb.append(stamp(alarm.fireAt, zone)).append("  ").append(label).append("\n")
                 sb.append("   อีก ").append(remaining(now, alarm.fireAt))
-                if (alarm.silent) sb.append("  (ช่วงเงียบ ไม่มีเสียง)")
+                if (alarm.silent) sb.append("  (ไม่มีเสียง)")
                 sb.append("\n")
             }
         }
@@ -806,11 +895,39 @@ class MainActivity : Activity() {
      * app categories, and this app is not on it. Sending someone to the settings
      * page and saying which switch to look for is slower and allowed.
      *
-     * On Samsung the switch that matters is in a second place as well —
-     * Settings, Battery, Background usage limits, Never sleeping apps — which
-     * no intent can open directly.
+     * On several brands the switch that matters is in a second place as well,
+     * one no intent can open directly. Power.kt names it for the phone this is
+     * actually running on, and the details panel says what to search for.
      */
     private fun openBatterySettings() = openAppSettings()
+
+    /** The battery line, naming the phone it is on rather than assuming one. */
+    private fun batteryWarning(): String {
+        val brand = brandPowerFor(Build.MANUFACTURER ?: "", Build.BRAND ?: "")?.brand
+        return if (brand != null) {
+            "ระบบแบตของ $brand อาจหยุดปลุกแอปนี้ แล้วการเตือนจะเงียบโดยไม่มีอะไรบอก"
+        } else {
+            "ระบบอาจหยุดปลุกแอปนี้เพื่อประหยัดแบต แล้วการเตือนจะเงียบโดยไม่มีอะไรบอก"
+        }
+    }
+
+    /**
+     * Exempt from Android's own pause-if-unused, which since Android 11 stops
+     * an app nobody has opened for a few months - alarms included. A reminder
+     * app is exactly the kind used only through its notifications, so it is
+     * exactly the kind that looks unused. Did not exist before Android 11.
+     */
+    private fun hibernationExempt(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) packageManager.isAutoRevokeWhitelisted else true
+
+    private fun openHibernationSettings() {
+        val uri = Uri.fromParts("package", packageName, null)
+        try {
+            startActivity(Intent(Intent.ACTION_AUTO_REVOKE_PERMISSIONS, uri))
+        } catch (e: Exception) {
+            openAppSettings()
+        }
+    }
 
     private fun openAppSettings() {
         val uri = Uri.fromParts("package", packageName, null)

@@ -157,6 +157,9 @@ fun remaining(from: Instant, to: Instant): String {
  * not.
  */
 enum class SetupWarning {
+    /** The person turned reminders off on this phone, on purpose. */
+    DEVICE_OFF,
+
     /** The person said no to notifications, or turned them off later. */
     NOTIFICATIONS_OFF,
 
@@ -165,6 +168,9 @@ enum class SetupWarning {
 
     /** The vendor's battery manager is free to stop waking the app. */
     BATTERY_MANAGED,
+
+    /** Android's own pause-if-unused may stop the app after a few months. */
+    HIBERNATION,
 
     /** Alarms are batched, so a reminder can be late by up to half an hour. */
     INEXACT_ALARMS,
@@ -187,7 +193,13 @@ fun setupWarnings(
     channelOn: Boolean,
     batteryExempt: Boolean,
     exactAllowed: Boolean,
+    hibernationExempt: Boolean = true,
+    deviceOff: Boolean = false,
 ): List<SetupWarning> {
+    // Said alone, by the same rule as the first one below: while the person has
+    // turned this phone off, every other line is a fix for something that is
+    // not happening anyway.
+    if (deviceOff) return listOf(SetupWarning.DEVICE_OFF)
     val out = ArrayList<SetupWarning>()
     if (!notificationsOn) {
         out.add(SetupWarning.NOTIFICATIONS_OFF)
@@ -195,6 +207,7 @@ fun setupWarnings(
         out.add(SetupWarning.CHANNEL_OFF)
     }
     if (!batteryExempt) out.add(SetupWarning.BATTERY_MANAGED)
+    if (!hibernationExempt) out.add(SetupWarning.HIBERNATION)
     if (!exactAllowed) out.add(SetupWarning.INEXACT_ALARMS)
     return out
 }

@@ -331,4 +331,44 @@ class FaceTest {
     fun `the clock column is the wall clock of the row`() {
         assertEquals("09:00", rowClock(row("a", Instant.parse("2026-08-31T02:00:00Z")), bkk))
     }
+
+    // ── the phone it is actually running on ─────────────────────────────────
+
+    @Test
+    fun `an iQOO is called iQOO and gets vivo's steps`() {
+        val p = brandPowerFor("vivo", "iQOO")
+        assertEquals("iQOO", p?.brand)
+        assertEquals("dontkillmyapp.com/vivo", p?.guide)
+        assertEquals(true, p?.steps?.any { it.startsWith("Autostart") })
+    }
+
+    @Test
+    fun `nobody is told they own a Samsung unless they do`() {
+        assertEquals("Samsung", brandPowerFor("samsung", "samsung")?.brand)
+        assertEquals(null, brandPowerFor("Google", "google"))
+        assertEquals(null, brandPowerFor("", ""))
+    }
+
+    @Test
+    fun `a brand is matched however the phone spells it`() {
+        val p = brandPowerFor(" Xiaomi ", "POCO")
+        assertEquals("POCO", p?.brand)
+        assertEquals("dontkillmyapp.com/xiaomi", p?.guide)
+    }
+
+    @Test
+    fun `turning this phone off is said alone`() {
+        assertEquals(
+            listOf(SetupWarning.DEVICE_OFF),
+            setupWarnings(false, false, false, false, hibernationExempt = false, deviceOff = true),
+        )
+    }
+
+    @Test
+    fun `android's own pause-if-unused stacks with the rest`() {
+        assertEquals(
+            listOf(SetupWarning.BATTERY_MANAGED, SetupWarning.HIBERNATION, SetupWarning.INEXACT_ALARMS),
+            setupWarnings(true, true, false, false, hibernationExempt = false),
+        )
+    }
 }
