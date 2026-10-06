@@ -282,10 +282,18 @@ class MainActivity : Activity() {
             quietTicks = 0
             redraw()
 
-            if (Repo.syncQuietly(this@MainActivity)) {
-                Scheduler.reschedule(this@MainActivity)
-                readEverything()
-                redraw()
+            // Before syncing, because the row may have arrived on an earlier
+            // run and this is the first build that knows to look at it.
+            if (adoptTheme()) {
+                recreate()
+            } else if (Repo.syncQuietly(this@MainActivity)) {
+                if (adoptTheme()) {
+                    recreate()
+                } else {
+                    Scheduler.reschedule(this@MainActivity)
+                    readEverything()
+                    redraw()
+                }
             }
         }
         // Settings can only have changed while this screen was away, which is
@@ -326,9 +334,13 @@ class MainActivity : Activity() {
             try {
                 if (Repo.syncQuietly(this@MainActivity)) {
                     quietTicks = 0
-                    Scheduler.reschedule(this@MainActivity)
-                    readEverything()
-                    redraw()
+                    if (adoptTheme()) {
+                        recreate()
+                    } else {
+                        Scheduler.reschedule(this@MainActivity)
+                        readEverything()
+                        redraw()
+                    }
                 }
             } finally {
                 syncing = false
@@ -428,7 +440,7 @@ class MainActivity : Activity() {
                     id = id,
                     name = labels[id] ?: id,
                     fireAt = alarm?.fireAt,
-                    shifted = alarm?.shiftedOutOfQuiet ?: false,
+                    silent = alarm?.silent ?: false,
                     done = done.contains(id),
                 ),
             )
@@ -581,6 +593,20 @@ class MainActivity : Activity() {
      * views away and builds them from the new palette, which is what a theme
      * change is.
      */
+    /**
+     * Follow a theme picked on the other machine, if there is one to follow.
+     *
+     * The decision of which ids are real is Ui.adopt's, and the decision of
+     * what a missing row means is TaskRepo's. This is only the part that has to
+     * happen on a screen: a database that will not open is not a reason to
+     * refuse to draw, so it is a colour that stays put rather than a crash.
+     */
+    private suspend fun adoptTheme(): Boolean = try {
+        Ui.adopt(this, Repo.themeId(this))
+    } catch (e: Exception) {
+        false
+    }
+
     private fun drawThemes() {
         themeBox.removeAllViews()
         val current = Ui.themeId(this)
@@ -593,8 +619,23 @@ class MainActivity : Activity() {
             strip?.addView(
                 Ui.swatch(this, p, p.id == current) {
                     if (p.id != current) {
+                        // Locally first, so the screen is right whatever the
+                        // database does. The row is what the other machine
+                        // reads, and it is written before the views are thrown
+                        // away rather than after: recreate() is the end of this
+                        // activity, and a coroutine started to outlive it is a
+                        // coroutine that may not finish.
                         Ui.setTheme(this, p.id)
-                        recreate()
+                        scope.launch {
+                            try {
+                                Repo.setThemeId(this@MainActivity, p.id)
+                            } catch (e: Exception) {
+                                // A colour that did not travel is worth less
+                                // than a screen that refused to change. The
+                                // next pick writes the row again.
+                            }
+                            recreate()
+                        }
                     }
                 },
                 Ui.cell(this, index % 3 == 0, 8f),
@@ -715,7 +756,7 @@ class MainActivity : Activity() {
                 val label = labels[alarm.taskId] ?: alarm.taskId
                 sb.append(stamp(alarm.fireAt, zone)).append("  ").append(label).append("\n")
                 sb.append("   อีก ").append(remaining(now, alarm.fireAt))
-                if (alarm.shiftedOutOfQuiet) sb.append("  (เลื่อนจากรอบเงียบ)")
+                if (alarm.silent) sb.append("  (ช่วงเงียบ ไม่มีเสียง)")
                 sb.append("\n")
             }
         }

@@ -112,6 +112,9 @@ fun scheduledTaskFrom(r: DbRow): ScheduledTask? {
         // reset". TaskRepoTest lists it as pending, so it stays a decision.
         notifyBeforeMin = int(r, "notify_before_min"),
         pausedUntil = paused,
+        // Absent on a row from a desktop older than the column, which reads as
+        // null and so as 0: not let through, which is what that desktop did.
+        ringInQuiet = int(r, "ring_in_quiet") == 1,
     )
 }
 
@@ -299,6 +302,28 @@ class TaskRepo(private val db: Db) {
 
     suspend fun quietSetting(): QuietSetting =
         quietSettingFrom(db.select(userSettingSql(), listOf(SyncValue.Text(UserSettings.QUIET))))
+
+    /**
+     * Which theme the person picked, on either machine, or null for none yet.
+     *
+     * Null and an unknown name are the same answer to the caller, and both mean
+     * leave this phone alone. Deciding which ids exist is Palette's job, not
+     * this one's - see Ui.adopt.
+     */
+    suspend fun themeId(): String? =
+        db.select(userSettingSql(), listOf(SyncValue.Text(UserSettings.THEME)))
+            .firstOrNull()?.let { text(it, "value") }
+
+    /**
+     * Say which theme, for the other machine.
+     *
+     * Nothing here checks that the id is real. It came from THEMES two lines
+     * before the call, and a repo that re-checked would be a second list of
+     * which themes exist.
+     */
+    suspend fun setThemeId(id: String) {
+        db.execute(SETTING_UPSERT_SQL, listOf(SyncValue.Text(UserSettings.THEME), SyncValue.Text(id)))
+    }
 
     /** uid to completed_until, for drawing which rows are already ticked. */
     suspend fun completions(): Map<String, String?> =

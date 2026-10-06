@@ -36,6 +36,14 @@ data class ScheduledTask(
 
     /** Snoozed until this instant; nothing is scheduled before it. */
     val pausedUntil: Instant? = null,
+
+    /**
+     * May ring through quiet hours. The person sets it on the task, in
+     * advance, the way an alarm is set. On this side every alarm is its task's
+     * only one, which makes each of them the last call - the one the desktop
+     * also lets through.
+     */
+    val ringInQuiet: Boolean = false,
 )
 
 /** One entry in the queue handed to the OS. */
@@ -45,17 +53,23 @@ data class Alarm(
     /** When the OS should ring. */
     val fireAt: Instant,
 
-    /** The reset this refers to. Differs from [fireAt] when a lead time or a
-     *  quiet-hours shift applies, and it is what the text should mention —
-     *  people care when the thing happens, not when the phone buzzed. */
+    /** The reset this refers to. Differs from [fireAt] when a lead time
+     *  applies, and it is what the text should mention - people care when the
+     *  thing happens, not when the phone buzzed. */
     val resetAt: Instant,
 
     /**
-     * True when quiet hours moved this later. The notification layer needs to
-     * know: "resets in 10 minutes" and "reset at 04:00, five hours ago" are
-     * different sentences, and [fireAt] alone cannot tell them apart.
+     * Post it without sound or vibration: it falls inside quiet hours and its
+     * task did not ask to be let through.
+     *
+     * This replaced shiftedOutOfQuiet, which moved the alarm to the end of the
+     * window instead. That buzzed at 08:00 about a deadline at 02:00 - six hours
+     * late, which is not a delayed reminder but a report - and it meant this
+     * phone and the desktop read one synced setting two ways. Quiet hours now
+     * mean what they mean on the desktop and in every phone platform's own
+     * do-not-disturb: on time, in the list, silently.
      */
-    val shiftedOutOfQuiet: Boolean = false,
+    val silent: Boolean = false,
 )
 
 /**
@@ -120,8 +134,9 @@ fun horizon(
             // ringing late about it.
             if (wanted <= now) continue
 
-            val shifted = quietWindow?.let { shiftOutOfQuiet(wanted, it, appZone) }
-            val fireAt = shifted ?: wanted
+            val fireAt = wanted
+            val silent = !task.ringInQuiet &&
+                    quietWindow?.let { insideQuiet(wanted, it, appZone) } == true
 
             if (task.pausedUntil != null && fireAt < task.pausedUntil) continue
 
@@ -129,7 +144,7 @@ fun horizon(
                 taskId = task.id,
                 fireAt = fireAt,
                 resetAt = reset,
-                shiftedOutOfQuiet = shifted != null,
+                silent = silent,
             )
             produced++
         }
@@ -137,8 +152,10 @@ fun horizon(
 
     // compareBy on fireAt alone would leave ties in whatever order the tasks
     // happened to be listed in, which makes "did the queue change" impossible
-    // to answer. Quiet hours guarantee ties: every alarm inside one window
-    // lands on the same instant, so several tasks can share a fireAt exactly.
+    // to answer. Ties are ordinary: four daily tasks that all reset at
+    // midnight share a fireAt exactly. (Quiet hours used to manufacture them by
+    // piling every alarm in the window onto its end; they no longer move
+    // anything, but the tie-break stays because the ties never needed them.)
     // Collapsing those into one notification is the notification layer's job,
     // not this one's — here they stay separate and merely ordered.
     return out
@@ -180,34 +197,20 @@ private fun minutesOfDay(hhmm: String): Int? {
 }
 
 /**
- * If [at] falls inside the quiet window, the moment it ends. Null if it does
- * not fall inside.
+ * Whether [at] falls inside the quiet window.
  *
- * Quiet hours are applied here, while the queue is being built, rather than
- * when an alarm fires. On the desktop the app draws its own notifications and
- * can decline to; here the OS draws them and cannot be called back. An alarm
- * that should not ring at 03:00 must never be registered for 03:00 in the
- * first place.
- *
- * Note this deliberately lets an alarm land *after* the reset it describes. A
- * game resetting at 04:00 with quiet hours until 08:00 should say so at 08:00 —
- * "it reset while you were asleep and is waiting" is the useful sentence, and
- * the alternative is a task that never notifies at all and never says why.
+ * Applied here, while the queue is being built, and not when an alarm fires -
+ * the reasoning that used to justify moving alarms still holds for deciding
+ * about them: the OS draws these notifications and cannot be called back, so
+ * whether one makes a sound has to be settled before it is registered. What
+ * changed is the answer. An alarm inside the window is registered at its real
+ * time and posted on the silent channel, so a game that reset at 04:00 is
+ * sitting in the list when the person wakes, and a deadline at 02:00 is on
+ * time rather than six hours late.
  */
-private fun shiftOutOfQuiet(at: Instant, w: QuietWindow, zone: TimeZone): Instant? {
-    val atMs = at.toEpochMilliseconds()
-    val wall = wallClock(atMs, zone)
+private fun insideQuiet(at: Instant, w: QuietWindow, zone: TimeZone): Boolean {
+    val wall = wallClock(at.toEpochMilliseconds(), zone)
     val minute = wall.h * 60 + wall.mi
-
-    val inside = if (w.wraps) minute >= w.startMin || minute < w.endMin
+    return if (w.wraps) minute >= w.startMin || minute < w.endMin
     else minute >= w.startMin && minute < w.endMin
-    if (!inside) return null
-
-    val endH = w.endMin / 60
-    val endMi = w.endMin % 60
-
-    var endMs = wallToEpochMs(atTime(wall, endH, endMi, 0), zone)
-    if (endMs <= atMs) endMs = wallToEpochMs(atTime(addDays(wall, 1), endH, endMi, 0), zone)
-
-    return Instant.fromEpochMilliseconds(endMs)
 }

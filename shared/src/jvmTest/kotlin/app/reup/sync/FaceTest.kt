@@ -221,9 +221,9 @@ class FaceTest {
     private fun row(
         id: String,
         at: Instant?,
-        shifted: Boolean = false,
+        silent: Boolean = false,
         done: Boolean = false,
-    ) = HomeRow(id, id, at, shifted, done)
+    ) = HomeRow(id, id, at, silent, done)
 
     @Test
     fun `rows are cut into days, in the order they arrived`() {
@@ -246,13 +246,13 @@ class FaceTest {
         // sentence four times at full width.
         val sections = homeSections(
             listOf(
-                row("a", plus(86_400), shifted = true),
-                row("b", plus(86_400), shifted = true),
-                row("c", plus(86_400), shifted = true),
+                row("a", plus(86_400), silent = true),
+                row("b", plus(86_400), silent = true),
+                row("c", plus(86_400), silent = true),
             ),
             now, bkk,
         )
-        assertEquals("เลื่อนจากรอบเงียบ", sections[0].note)
+        assertEquals("ช่วงเงียบ ไม่มีเสียง", sections[0].note)
         for (r in sections[0].rows) assertEquals("", rowNote(r, now, hoisted = true))
     }
 
@@ -260,13 +260,13 @@ class FaceTest {
     fun `a reason only one row has stays on that row`() {
         val sections = homeSections(
             listOf(
-                row("a", plus(86_400), shifted = true),
+                row("a", plus(86_400), silent = true),
                 row("b", plus(86_400)),
             ),
             now, bkk,
         )
         assertEquals(null, sections[0].note)
-        assertEquals("เลื่อนจากรอบเงียบ", rowNote(sections[0].rows[0], now, hoisted = false))
+        assertEquals("ช่วงเงียบ ไม่มีเสียง", rowNote(sections[0].rows[0], now, hoisted = false))
         assertEquals("", rowNote(sections[0].rows[1], now, hoisted = false))
     }
 
@@ -274,7 +274,7 @@ class FaceTest {
     fun `one row on its own keeps its own reason`() {
         // "all of them" is true of a single row too, and hoisting there moves a
         // word up one line for nothing.
-        val sections = homeSections(listOf(row("a", plus(86_400), shifted = true)), now, bkk)
+        val sections = homeSections(listOf(row("a", plus(86_400), silent = true)), now, bkk)
         assertEquals(null, sections[0].note)
     }
 

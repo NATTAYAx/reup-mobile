@@ -60,7 +60,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val taskId = intent.getStringExtra(Scheduler.EXTRA_TASK_ID) ?: return
         val resetAtMs = intent.getLongExtra(Scheduler.EXTRA_RESET_AT, 0L)
-        val shifted = intent.getBooleanExtra(Scheduler.EXTRA_SHIFTED, false)
+        val silent = intent.getBooleanExtra(Scheduler.EXTRA_SILENT, false)
 
         finishLater(TAG) {
             // ── ask the folder first, but only for a moment ───────────────────
@@ -157,7 +157,11 @@ class AlarmReceiver : BroadcastReceiver() {
             // has not happened yet, is the kind of small dishonesty that teaches
             // people to stop reading notifications.
             val body = when {
-                shifted -> "รีเซ็ตไปแล้วตอน ${clock(resetAt, zone)}"
+                // Read off the clock rather than off a flag. Quiet hours no longer
+                // move alarms, so the only way to be late now is the system
+                // holding an inexact alarm back, and a quarter of an hour of that
+                // is ordinary - "ถึงรอบแล้ว" is still true ten minutes after.
+                nowMs - resetAtMs > 15 * 60_000 -> "รีเซ็ตไปแล้วตอน ${clock(resetAt, zone)}"
                 resetAtMs > nowMs + 60_000 -> "อีก ${minutesUntil(resetAtMs, nowMs)} นาทีจะรีเซ็ต"
                 else -> "ถึงรอบแล้ว"
             }
@@ -176,6 +180,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 title = label,
                 body = body,
                 taskId = taskId,
+                silent = silent,
             )
 
             Scheduler.reschedule(context)

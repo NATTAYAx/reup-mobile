@@ -244,8 +244,8 @@ data class HomeRow(
     val name: String,
     /** When it next rings, or null when nothing is queued for it. */
     val fireAt: Instant?,
-    /** The alarm was pushed out of quiet hours, so the clock is not the reset. */
-    val shifted: Boolean,
+    /** It falls inside quiet hours and will arrive without a sound. */
+    val silent: Boolean,
     val done: Boolean,
 )
 
@@ -257,7 +257,7 @@ data class HomeSection(
     val rows: List<HomeRow>,
 )
 
-private const val SHIFTED = "เลื่อนจากรอบเงียบ"
+private const val SILENT = "ช่วงเงียบ ไม่มีเสียง"
 
 /**
  * The list, cut into days.
@@ -272,7 +272,7 @@ private const val SHIFTED = "เลื่อนจากรอบเงียบ
  *
  * A day heading says the day once. The clock goes in its own column on the
  * right, where four identical times line up and stop being four sentences. And
- * when every row under a heading was shifted for the same reason, the reason
+ * when every row under a heading is silenced by quiet hours, that
  * moves up to the heading, which is the case in the screenshot that started
  * this.
  *
@@ -304,8 +304,8 @@ fun homeSections(rows: List<HomeRow>, now: Instant, zone: TimeZone): List<HomeSe
     for ((title, group) in days) {
         // One row saying it is not a repetition, so it stays on the row where
         // the clock it explains is.
-        val hoist = group.size > 1 && group.all { it.shifted }
-        out.add(HomeSection(title, if (hoist) SHIFTED else null, group))
+        val hoist = group.size > 1 && group.all { it.silent }
+        out.add(HomeSection(title, if (hoist) SILENT else null, group))
     }
     if (undated.isNotEmpty()) out.add(HomeSection("ไม่มีกำหนด", null, undated))
     if (ticked.isNotEmpty()) out.add(HomeSection("ติ๊กแล้ว", null, ticked))
@@ -325,13 +325,13 @@ fun rowClock(row: HomeRow, zone: TimeZone): String =
  * พรุ่งนี้, "อีก 23 ชม. 10 นาที" is the same fact spelled out longer, and it is
  * the line that made four rows look like a wall of text.
  *
- * @param hoisted the section heading is already carrying the shift note
+ * @param hoisted the section heading is already carrying the quiet note
  */
 fun rowNote(row: HomeRow, now: Instant, hoisted: Boolean): String {
     if (row.done) return ""
     if (row.fireAt == null) return "ไม่มีรอบถัดไป"
     val parts = ArrayList<String>()
     if ((row.fireAt - now).inWholeHours < 24) parts.add(untilPhrase(now, row.fireAt))
-    if (row.shifted && !hoisted) parts.add(SHIFTED)
+    if (row.silent && !hoisted) parts.add(SILENT)
     return parts.joinToString(" · ")
 }
