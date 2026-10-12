@@ -136,7 +136,7 @@ fun horizon(
 
             val fireAt = wanted
             val silent = !task.ringInQuiet &&
-                    quietWindow?.let { insideQuiet(wanted, it, appZone) } == true
+                quietWindow?.let { insideQuiet(wanted, it, appZone) } == true
 
             if (task.pausedUntil != null && fireAt < task.pausedUntil) continue
 
@@ -162,6 +162,27 @@ fun horizon(
         .sortedWith(compareBy({ it.fireAt }, { it.resetAt }, { it.taskId }))
         .take(limit)
 }
+
+/**
+ * Each task's own next alarm, soonest first.
+ *
+ * What a screen shows, which is a different question from what the system is
+ * handed. [horizon] answers "the next N rings across everything", and N is the
+ * number of slots the scheduler keeps; with more tasks than that, the tasks
+ * whose rings fall after the Nth get none of them, and a list built from it
+ * shows a daily that rings tomorrow morning as having nothing scheduled.
+ *
+ * Same ordering as [horizon], so a list drawn from this and the queue handed to
+ * the system agree about which comes first.
+ */
+fun nextPerTask(
+    tasks: List<ScheduledTask>,
+    now: Instant,
+    appZone: TimeZone,
+    quiet: QuietHours? = null,
+): List<Alarm> =
+    tasks.mapNotNull { horizon(listOf(it), now, appZone, 1, quiet).firstOrNull() }
+        .sortedWith(compareBy({ it.fireAt }, { it.resetAt }, { it.taskId }))
 
 // ── quiet hours ──────────────────────────────────────────────────────────────
 

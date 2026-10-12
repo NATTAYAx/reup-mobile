@@ -63,10 +63,23 @@ class PaletteTest {
     fun `quiet text is quiet without becoming invisible`() {
         for (t in THEMES) {
             // The bar for body text at this size. Below it, a note is decoration
-            // that happens to contain words.
-            assertTrue(contrast(t.dim, t.card) >= 4.5, t.name + " dim on card")
-            // Labels and marks are allowed to be fainter, but not to vanish.
-            assertTrue(contrast(t.faint, t.card) >= 3.0, t.name + " faint on card")
+            // that happens to contain words. Faint is held to it too, on the
+            // raised panel as well as the card, since the redesign writes words
+            // in it - a ticked row's "ทำแล้ว · รอบใหม่ 04:00" is faint.
+            for ((name, surface) in listOf("card" to t.card, "raised" to t.raised)) {
+                assertTrue(contrast(t.dim, surface) >= 4.5, t.name + " dim on " + name)
+                assertTrue(contrast(t.faint, surface) >= 4.5, t.name + " faint on " + name)
+            }
+        }
+    }
+
+    @Test
+    fun `faint stays quieter than dim`() {
+        // Otherwise the two are one colour with two names, and a ticked row
+        // stops looking any different from a waiting one.
+        for (t in THEMES) {
+            assertTrue(luminance(t.faint) < luminance(t.dim), t.name + " faint is not below dim")
+            assertTrue(contrast(t.dim, t.faint) >= 1.3, t.name + " faint and dim are too close")
         }
     }
 

@@ -374,6 +374,33 @@ fun moneyUpdateSql(table: String, columns: List<String>): String {
             " WHERE uid = ? AND deleted = 0"
 }
 
+// ─── two questions only the phone asks ───────────────────────────────────────
+//
+// Both come from slips arriving on their own, which is a phone thing: the
+// desktop has no album to watch. So unlike the statements above, these are not
+// pinned against a desktop copy — there is none to disagree with.
+
+/**
+ * Whether a slip is already a row. `?` is the reference.
+ *
+ * The unique index on slip_ref would refuse the second insert anyway, but as a
+ * constraint error from the driver: true, and a sentence nobody can read. This
+ * asks first so the answer can be "already saved". A tombstone clears its
+ * slip_ref, so a deleted row does not count and the slip can be saved again.
+ */
+const val SQL_SLIP_RECORDED: String =
+    "SELECT 1 as n FROM expenses WHERE slip_ref = ? AND deleted = 0 LIMIT 1"
+
+/**
+ * Where a note went last time. `?` is the note, compared whole.
+ *
+ * Rows filed under the fallback are skipped: `other` is where things go when
+ * nobody said, and repeating that is not remembering anything.
+ */
+const val SQL_CATEGORY_FOR_NOTE: String =
+    "SELECT category FROM expenses WHERE deleted = 0 AND note = ? AND category != '" +
+            CATEGORY_FALLBACK + "' ORDER BY created_at DESC LIMIT 1"
+
 /**
  * Spending, from the phone.
  *
@@ -381,6 +408,22 @@ fun moneyUpdateSql(table: String, columns: List<String>): String {
  * next sync in the same breath, which is why nothing here mentions sync at all.
  */
 class MoneyRepo(private val db: Db) {
+
+    /** Whether a slip with this reference is already in the books. See [SQL_SLIP_RECORDED]. */
+    suspend fun slipRecorded(reference: String): Boolean =
+        db.select(SQL_SLIP_RECORDED, listOf(SyncValue.Text(reference))).isNotEmpty()
+
+    /**
+     * The category the same note was filed under last time, or null.
+     *
+     * An empty note is nobody's habit and is never looked up.
+     */
+    suspend fun categoryUsedFor(note: String): String? {
+        val n = note.trim()
+        if (n.isEmpty()) return null
+        val rows = db.select(SQL_CATEGORY_FOR_NOTE, listOf(SyncValue.Text(n)))
+        return (rows.firstOrNull()?.get("category") as? SyncValue.Text)?.value?.takeIf { it.isNotEmpty() }
+    }
 
     /**
      * What the desktop is counting in, or null if this phone has not been told.

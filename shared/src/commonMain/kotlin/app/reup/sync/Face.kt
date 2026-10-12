@@ -1,6 +1,7 @@
 package app.reup.core
 
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.isoDayNumber
@@ -36,13 +37,13 @@ import kotlinx.datetime.toLocalDateTime
 // panel prints.
 
 /** Sunday first, matching [Wall.dow] so there is one convention in this module. */
-private val THAI_DAYS = listOf(
+internal val THAI_DAYS = listOf(
     "อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์",
 )
 
 private val THAI_DAYS_SHORT = listOf("อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.")
 
-private val THAI_MONTHS = listOf(
+internal val THAI_MONTHS = listOf(
     "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
     "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
 )
@@ -63,15 +64,16 @@ internal val THAI_MONTHS_SHORT = listOf(
 private fun pad2(n: Int): String = if (n < 10) "0$n" else n.toString()
 
 /**
- * The line under the app's name: which day it is, in words.
+ * The small line above the screen's title: which day it is, in words.
  *
  * No year. A year is only useful when there is doubt about which one it is, and
- * a phone that is awake and showing this is not in any doubt.
+ * a phone that is awake and showing this is not in any doubt. No "วัน" in front
+ * either, since the title under it is วันนี้ and two of them stacked is a stutter.
  */
 fun headerDate(now: Instant, zone: TimeZone): String {
     val t = now.toLocalDateTime(zone)
     val dow = t.dayOfWeek.isoDayNumber % 7
-    return "วัน" + THAI_DAYS[dow] + " " + t.dayOfMonth + " " + THAI_MONTHS[t.monthNumber - 1]
+    return THAI_DAYS[dow] + " " + t.dayOfMonth + " " + THAI_MONTHS[t.monthNumber - 1]
 }
 
 /** "23:50", in the zone the person is standing in. */
@@ -246,7 +248,7 @@ fun homeOrder(ids: List<String>, queued: List<String>, done: Set<String>): List<
 // ─── the shape of the home list ─────────────────────────────────────────────
 
 /**
- * One task, reduced to the four things the list draws it from.
+ * One task, reduced to what the list draws it from.
  *
  * Not ScheduledTask: this is deliberately a smaller thing, so that the grouping
  * below can be tested without building a schedule, a timezone and a queue to
@@ -260,9 +262,21 @@ data class HomeRow(
     /** It falls inside quiet hours and will arrive without a sound. */
     val silent: Boolean,
     val done: Boolean,
+    /** The reset [fireAt] is about. Later than it when a lead time applies. */
+    val resetAt: Instant? = null,
+    /** Ticked today, where the person is standing. Only read when [done]. */
+    val doneToday: Boolean = false,
+    /** Snoozed on the desktop, so nothing rings before the pause ends. */
+    val paused: Boolean = false,
+    /** How often it comes back, from [cadencePhrase]. */
+    val cadence: String? = null,
+    /** The desktop's category key: game, school, work or personal. */
+    val category: String? = null,
+    /** Comes back on its own. A one-off that is ticked is simply done. */
+    val recurring: Boolean = true,
 )
 
-/** A day's worth of rows, with anything they all have in common said once. */
+/** A group of rows under one heading, with anything they all share said once. */
 data class HomeSection(
     val title: String,
     /** Hoisted out of the rows when every row in the section says it. */
@@ -270,59 +284,179 @@ data class HomeSection(
     val rows: List<HomeRow>,
 )
 
-private const val SILENT = "ช่วงเงียบ ไม่มีเสียง"
+/**
+ * What the Today tab draws.
+ *
+ * Exactly one of [next] and [calm] is set. Either something is left to do
+ * today, and the soonest of it gets the big card with the button on it, or
+ * nothing is, and the screen says that in words instead of drawing an empty
+ * card that looks like something failed to load.
+ */
+data class TodayFace(
+    val next: HomeRow?,
+    val calm: Calm?,
+    val sections: List<HomeSection>,
+)
+
+/** The day with nothing left in it. */
+data class Calm(
+    val title: String,
+    /** "รอบถัดไปคือพรุ่งนี้ 04:00", or null when nothing is queued at all. */
+    val nextAt: String?,
+    /** Whose round that is. */
+    val nextName: String?,
+)
+
+/** Said once per section when it is true of every row in it. See [todayFace]. */
+const val QUIET_NOTE = "ไม่มีเสียง"
 
 /**
- * The list, cut into days.
+ * The Today tab, cut into what is next, what else is today, and the days after.
  *
- * WHY THIS EXISTS
+ * WHY THE FIRST ROW IS TAKEN OUT OF THE LIST
  *
- * The flat version repeated itself. Four daily tasks that all reset at midnight
- * all get pushed to the same time by quiet hours, so four rows in a row read
- * exactly "พรุ่งนี้ 08:00 · อีก 23 ชม. 10 นาที · เลื่อนจากรอบเงียบ" — the same
- * sentence, four times, at full width. Every word of it was true and almost
- * none of it was information.
+ * The list answered "what is coming" and left "what do I do now" to the reader,
+ * who had to find the top row and then find its button. The soonest thing due
+ * today is the one question someone opening this at a bus stop has, so it gets
+ * a card of its own with a button big enough for a thumb, and it is not drawn a
+ * second time underneath.
  *
- * A day heading says the day once. The clock goes in its own column on the
- * right, where four identical times line up and stop being four sentences. And
- * when every row under a heading is silenced by quiet hours, that
- * moves up to the heading, which is the case in the screenshot that started
- * this.
+ * Only something due TODAY. A daily that resets at four tomorrow morning is not
+ * "next" at eight in the evening in any sense a person means; it is tomorrow's.
+ * When nothing is left today the card becomes [Calm], which names the next
+ * round in words, because an empty slot where a card should be reads as a bug.
+ *
+ * WHERE A TICKED ROW GOES
+ *
+ * A row ticked today stays in today's group, at the bottom, so the day reads as
+ * done rather than as empty, and a mis-tap is undone where it happened. A row
+ * ticked on an earlier day and still inside its cycle - a weekly done on
+ * Monday - is not today's work, so it sits in a group of its own at the end,
+ * still on screen, because hiding a finished thing is how a mis-tap becomes
+ * permanent.
+ *
+ * WHEN A REASON IS SAID ONCE
+ *
+ * The flat list once read "พรุ่งนี้ 08:00 · เลื่อนจากรอบเงียบ" four times at full
+ * width. When every row still waiting in a group arrives silently, the word
+ * moves to the heading; one row on its own keeps it, since "all of them" moves
+ * a word up one line for nothing there.
  *
  * ORDER
  *
  * Preserved exactly as given. The caller has already sorted by [homeOrder], and
  * a second opinion about order in here is how two rules end up disagreeing.
  */
-fun homeSections(rows: List<HomeRow>, now: Instant, zone: TimeZone): List<HomeSection> {
-    val out = ArrayList<HomeSection>()
+fun todayFace(rows: List<HomeRow>, now: Instant, zone: TimeZone): TodayFace {
+    val today = now.toLocalDateTime(zone).date
+
+    val dueToday = ArrayList<HomeRow>()
     val undated = ArrayList<HomeRow>()
-    val ticked = ArrayList<HomeRow>()
+    val doneToday = ArrayList<HomeRow>()
+    val doneBefore = ArrayList<HomeRow>()
 
     // Insertion-ordered, so the days come out in the order the queue reached
-    // them rather than in alphabetical order of the words for them.
-    val days = LinkedHashMap<String, MutableList<HomeRow>>()
+    // them, which is the order they happen in.
+    val later = LinkedHashMap<LocalDate, MutableList<HomeRow>>()
 
     for (r in rows) {
+        val at = r.fireAt
         when {
-            // Finished things sink, whatever time they would otherwise sort to.
-            // Still on screen, because a mis-tap has to be undoable, but they
-            // are not what the list is for.
-            r.done -> ticked.add(r)
-            r.fireAt == null -> undated.add(r)
-            else -> days.getOrPut(dayPhrase(r.fireAt, now, zone)) { ArrayList() }.add(r)
+            r.done && r.doneToday -> doneToday.add(r)
+            r.done -> doneBefore.add(r)
+            at == null -> undated.add(r)
+            else -> {
+                val day = at.toLocalDateTime(zone).date
+                // The queue only holds the future, so "not after today" is
+                // today. Said this way so a clock that moved backwards puts a
+                // row on today rather than on a day that has already gone.
+                if (today.daysUntil(day) <= 0) dueToday.add(r)
+                else later.getOrPut(day) { ArrayList() }.add(r)
+            }
         }
     }
 
-    for ((title, group) in days) {
-        // One row saying it is not a repetition, so it stays on the row where
-        // the clock it explains is.
-        val hoist = group.size > 1 && group.all { it.silent }
-        out.add(HomeSection(title, if (hoist) SILENT else null, group))
+    val next = dueToday.firstOrNull()
+    val rest = dueToday.drop(1)
+
+    val sections = ArrayList<HomeSection>()
+    if (rest.isNotEmpty() || doneToday.isNotEmpty()) {
+        sections.add(
+            HomeSection(
+                title = if (rest.isNotEmpty()) "ที่เหลือวันนี้" else "ทำแล้ววันนี้",
+                note = hoisted(rest),
+                rows = rest + doneToday,
+            ),
+        )
     }
-    if (undated.isNotEmpty()) out.add(HomeSection("ไม่มีกำหนด", null, undated))
-    if (ticked.isNotEmpty()) out.add(HomeSection("ติ๊กแล้ว", null, ticked))
-    return out
+    for (group in later.values) {
+        sections.add(HomeSection(dayTitle(group[0].fireAt!!, now, zone), hoisted(group), group))
+    }
+    if (undated.isNotEmpty()) sections.add(HomeSection("ไม่มีกำหนด", null, undated))
+    if (doneBefore.isNotEmpty()) sections.add(HomeSection("ทำแล้ว รอรอบใหม่", null, doneBefore))
+
+    val calm = if (next != null) null else {
+        val upcoming = later.values.firstOrNull()?.firstOrNull()
+        Calm(
+            title = if (doneToday.isNotEmpty()) "วันนี้ทำครบแล้ว" else "วันนี้ไม่มีอะไรรีเซ็ต",
+            nextAt = upcoming?.fireAt?.let { "รอบถัดไปคือ" + whenWords(it, now, zone) },
+            nextName = upcoming?.name,
+        )
+    }
+    return TodayFace(next, calm, sections)
+}
+
+/** The quiet note, when every row still waiting says it and there is more than one. */
+private fun hoisted(waiting: List<HomeRow>): String? =
+    if (waiting.size > 1 && waiting.all { it.silent }) QUIET_NOTE else null
+
+/**
+ * A day as a heading: "พรุ่งนี้ · ศุกร์ 9 ต.ค.", or the weekday and date further
+ * out.
+ *
+ * The date rides along with พรุ่งนี้ because a heading is read once, carefully,
+ * and "tomorrow" alone makes the reader work out which day that is.
+ */
+fun dayTitle(at: Instant, now: Instant, zone: TimeZone): String {
+    val today = now.toLocalDateTime(zone).date
+    val t = at.toLocalDateTime(zone)
+    val date = THAI_DAYS[t.dayOfWeek.isoDayNumber % 7] + " " + t.dayOfMonth + " " +
+            THAI_MONTHS_SHORT[t.monthNumber - 1]
+    return when (today.daysUntil(t.date)) {
+        0 -> "วันนี้"
+        1 -> "พรุ่งนี้ · $date"
+        -1 -> "เมื่อวาน · $date"
+        else -> date
+    }
+}
+
+/** "พรุ่งนี้ 04:00", "วันศุกร์ 04:00", "วันที่ 20 ต.ค. 04:00" - for a sentence. */
+private fun whenWords(at: Instant, now: Instant, zone: TimeZone): String {
+    val today = now.toLocalDateTime(zone).date
+    val t = at.toLocalDateTime(zone)
+    val clock = clockOf(at, zone)
+    return when (val diff = today.daysUntil(t.date)) {
+        0 -> "วันนี้ $clock"
+        1 -> "พรุ่งนี้ $clock"
+        in 2..6 -> "วัน" + THAI_DAYS[t.dayOfWeek.isoDayNumber % 7] + " " + clock
+        else -> if (diff < 0) clock else
+            "วันที่ " + t.dayOfMonth + " " + THAI_MONTHS_SHORT[t.monthNumber - 1] + " " + clock
+    }
+}
+
+/**
+ * The line under the name on the big card: "13:00 · อีก 33 นาที".
+ *
+ * The countdown is here and not on the rows, because this is the one row whose
+ * "how long" is the question being asked.
+ */
+fun heroLine(row: HomeRow, now: Instant, zone: TimeZone): String {
+    val at = row.fireAt ?: return ""
+    val sameDay = now.toLocalDateTime(zone).date == at.toLocalDateTime(zone).date
+    val time = if (sameDay) clockOf(at, zone) else dayPhrase(at, now, zone) + " " + clockOf(at, zone)
+    val parts = arrayListOf(time, untilPhrase(now, at))
+    if (row.silent) parts.add(QUIET_NOTE)
+    return parts.joinToString(" · ")
 }
 
 /**
@@ -332,19 +466,95 @@ fun rowClock(row: HomeRow, zone: TimeZone): String =
     if (row.fireAt == null) "" else clockOf(row.fireAt, zone)
 
 /**
- * The second line of a row, which exists only when it has something to add.
+ * The second line of a row: how often, what kind, and anything unusual.
  *
- * The countdown is dropped past a day. Under a heading that already says
- * พรุ่งนี้, "อีก 23 ชม. 10 นาที" is the same fact spelled out longer, and it is
- * the line that made four rows look like a wall of text.
+ * A ticked row says when it comes back instead, because that is the only thing
+ * still worth knowing about it. Null when there is nothing to add, so the row is
+ * one line rather than one line and an empty one.
  *
- * @param hoisted the section heading is already carrying the quiet note
+ * @param hoisted the heading already says the quiet note for this group
  */
-fun rowNote(row: HomeRow, now: Instant, hoisted: Boolean): String {
-    if (row.done) return ""
-    if (row.fireAt == null) return "ไม่มีรอบถัดไป"
+fun rowLine(row: HomeRow, now: Instant, zone: TimeZone, hoisted: Boolean): String? {
+    if (row.done) {
+        // A one-off ticked before its deadline still has that deadline queued,
+        // and "รอบใหม่ 18:00" would promise a round that is never coming.
+        if (!row.recurring) return "ทำแล้ว"
+        val back = row.resetAt ?: row.fireAt ?: return "ทำแล้ว"
+        return "ทำแล้ว · รอบใหม่ " + comeBack(back, now, zone)
+    }
     val parts = ArrayList<String>()
-    if ((row.fireAt - now).inWholeHours < 24) parts.add(untilPhrase(now, row.fireAt))
-    if (row.silent && !hoisted) parts.add(SILENT)
-    return parts.joinToString(" · ")
+    row.cadence?.let { parts.add(it) }
+    categoryName(row.category)?.let { parts.add(it) }
+    if (row.paused) parts.add("พักอยู่")
+    if (row.silent && !hoisted) parts.add(QUIET_NOTE)
+    return parts.joinToString(" · ").ifEmpty { null }
+}
+
+/**
+ * When a ticked row comes back. A clock inside a day, where "04:00" can only
+ * mean the next one; a weekday and clock inside a week; a date past that.
+ */
+private fun comeBack(at: Instant, now: Instant, zone: TimeZone): String {
+    val hours = (at - now).inWholeHours
+    val t = at.toLocalDateTime(zone)
+    return when {
+        hours < 24 -> clockOf(at, zone)
+        hours < 24 * 7 -> THAI_DAYS_SHORT[t.dayOfWeek.isoDayNumber % 7] + " " + clockOf(at, zone)
+        else -> t.dayOfMonth.toString() + " " + THAI_MONTHS_SHORT[t.monthNumber - 1]
+    }
+}
+
+/**
+ * How often a task comes back, in the words a person would use.
+ *
+ * Weekly names its day, because "ทุกสัปดาห์" leaves the one useful fact out.
+ * Null for a type this build has never heard of: a newer desktop can invent
+ * one, and saying nothing is better than guessing a rhythm.
+ */
+fun cadencePhrase(spec: ResetSpec): String? = when (spec.resetType) {
+    ResetType.DAILY -> "ทุกวัน"
+    ResetType.WEEKLY -> spec.resetDay?.takeIf { it in 0..6 }?.let { "ทุกวัน" + THAI_DAYS[it] } ?: "ทุกสัปดาห์"
+    ResetType.BIWEEKLY -> "ทุก 2 สัปดาห์"
+    ResetType.CUSTOM_DAYS -> {
+        val n = spec.resetIntervalDays
+        when {
+            n == null || n < 1 -> "รอบกำหนดเอง"
+            n == 1 -> "ทุกวัน"
+            else -> "ทุก $n วัน"
+        }
+    }
+    ResetType.EVENT_WINDOW -> "กิจกรรมจำกัดเวลา"
+    ResetType.ONE_TIME, ResetType.SPECIFIC_DATE -> "ครั้งเดียว"
+    else -> null
+}
+
+/**
+ * Whether a task comes back on its own. Mirror of the desktop's isRecurring,
+ * and the same set TaskRepo's doneUntil decides a tick's length by.
+ */
+fun recurs(spec: ResetSpec): Boolean = spec.resetType in setOf(
+    ResetType.DAILY, ResetType.WEEKLY, ResetType.BIWEEKLY, ResetType.CUSTOM_DAYS,
+)
+
+/** The desktop's four task categories, in its Thai. Null for anything else. */
+fun categoryName(key: String?): String? = when (key) {
+    "game" -> "เกม"
+    "school" -> "การเรียน"
+    "work" -> "งาน"
+    "personal" -> "ส่วนตัว"
+    else -> null
+}
+
+/**
+ * Whether a tick happened today where the person is.
+ *
+ * `completed_at` is written by the database clock on this side and by
+ * toISOString on the desktop, both UTC with milliseconds. Anything that does not
+ * parse is "not today", which puts the row in the group at the bottom rather
+ * than losing it.
+ */
+fun tickedToday(completedAt: String?, now: Instant, zone: TimeZone): Boolean {
+    val raw = completedAt?.takeIf { it.isNotBlank() } ?: return false
+    val at = runCatching { Instant.parse(raw) }.getOrNull() ?: return false
+    return at.toLocalDateTime(zone).date == now.toLocalDateTime(zone).date
 }

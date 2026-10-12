@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.androidApplication)
+    alias(libs.plugins.composeCompiler)
 }
 
 /**
@@ -37,8 +38,9 @@ val googleClientId: String? = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }.getProperty("reupGoogleClientId")
 
-// Still no Compose, no AndroidX, no database — the only dependency is :shared.
 // AGP 9 has Kotlin support built in, so there is no Kotlin plugin to apply here.
+// The one Kotlin plugin that is applied is the Compose compiler, which since
+// Kotlin 2.0 is a compiler plugin like serialization rather than a library.
 
 android {
     namespace = "app.reup"
@@ -70,8 +72,12 @@ android {
     }
 
     buildFeatures {
-        // Off by default since AGP 8. On for exactly one field.
+        // Off by default since AGP 8. On for the client id and the version
+        // line at the bottom of Settings.
         buildConfig = true
+        // The main screen is Compose. The other screens are still views and
+        // still work; they move over one at a time.
+        compose = true
     }
 
     buildTypes {
@@ -97,4 +103,16 @@ dependencies {
     // kotlinx-datetime arrives through :shared, which declares it as `api`
     // because Instant and TimeZone are part of nextReset()'s signature.
     implementation(libs.tesseract4android)
+
+    // The screens. Four libraries and no more: ui and foundation are what
+    // everything is drawn with, material3 is for the pieces worth not
+    // rewriting - dialogs, menus, the snackbar, the ripple - and
+    // activity-compose is the door from an Activity into Compose. No icon pack:
+    // the icons are thirty-six vector files in res/drawable, which is a few
+    // kilobytes rather than a few megabytes.
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.activity.compose)
 }

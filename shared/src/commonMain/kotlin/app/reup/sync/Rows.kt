@@ -129,6 +129,12 @@ object Rows {
         }
         for (c in payloadColumns(shape)) {
             if (c !in known) continue
+            // Absent is not null: a missing key means the writer's table has
+            // no such column, so leave it out - an insert gets the default and
+            // an update keeps what is there. Writing null refused every batch
+            // a new phone read from before tasks.ring_in_quiet existed, because
+            // that column is NOT NULL. See rows.ts.
+            if (c !in r.fields) continue
             cols += c
             params += r.fields[c] ?: SyncValue.Null
         }

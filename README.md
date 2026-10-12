@@ -8,9 +8,10 @@ chores work the same way. The desktop app has handled that for months; this is
 the half that can reach you when you are not sitting at the computer, which for
 most people is most of the time.
 
-Kotlin Multiplatform, no UI framework yet, Android only so far. The shared
-module compiles for iOS and CI proves it every push, but nobody has run it on an
-iPhone because nobody here owns one.
+Kotlin Multiplatform, Android only so far. The main screen is Jetpack Compose;
+the other screens are still hand-built views and move over one at a time. The
+shared module compiles for iOS and CI proves it every push, but nobody has run
+it on an iPhone because nobody here owns one.
 
 ---
 
@@ -139,6 +140,57 @@ for weeks and then simply stopped, with no crash and nothing visibly different.
 
 ---
 
+## Reading slips
+
+Settings → อ่านสลิป reads a payment slip or a receipt from a screenshot, on the
+phone, with nothing sent anywhere. The picture is turned black and white
+(`SlipImage.kt`), read by Tesseract (`SlipOcr.kt`), and the text is turned into
+an amount, a currency, a date and a reference by rules that refuse rather than
+guess (`SlipText.kt`). Nothing is saved until a person presses save on the money
+screen it opens.
+
+The rules know how money, dates and labels are written in Thailand and in most
+of the countries around it and beyond: baht and Buddhist years, `S$12.50`,
+`Rp 150.000`, `1.234,56 €`, `Oct 8, 2026`, `2026年10月8日`. The phone's own
+currency settles a sign several currencies share — `$`, `¥`, `kr` — and its
+region settles whether `03/04` is March, except on a Thai slip, which is always
+day first.
+
+The APK carries Thai and English language data, which covers Thai and every
+language written in Latin letters. For another script, put that language's file
+from [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) into
+`app/src/main/assets/tessdata/` — `jpn.traineddata`, `kor.traineddata`,
+`chi_sim.traineddata`, `vie.traineddata` — and rebuild. Every file in that
+folder is used, Thai first; the words those slips print are already in
+`SlipText.kt`.
+
+Money signs the English data has no letter for (₱ ฿ ₩ ₹ ₫) come back as a
+letter or as nothing. `P500.00` is read as 500 in whatever currency the rest of
+the slip, or the phone, says; a bare `500` with nothing beside it is refused.
+
+### Slips that arrive on their own
+
+Settings → สลิปเข้า Reup เอง. Bank apps such as K PLUS and Krungthai NEXT save
+every slip into an album the moment a transfer goes through. With this on, the
+app watches the albums picked there (`SlipWatch.kt`), reads each new slip with
+the same rules, and puts it in the shade and at the top of the money tab, with a
+save button when nothing on it is left to check. Nothing is written until that
+button, or the form, is pressed.
+
+What was typed into บันทึกช่วยจำ at the bank becomes the note, and when its
+first word is a category — `อาหาร ข้าวมันไก่`, `อาหารทดสอบ` — that becomes the
+category. A transfer between the payer's own accounts is recognised and never
+offered as spending. The rules for all of it are in `SlipInbox.kt`, with tests.
+
+It is the one thing in the app that wakes up by itself, and it is shaped to cost
+next to nothing: off until switched on, woken by the system only when a picture
+is added, and the recogniser runs only for a new picture inside a chosen album.
+Opening the app reads anything a battery manager held back. It needs the whole
+gallery — Android 14's "selected photos" never includes tomorrow's slip — and
+says so when it does not have it.
+
+---
+
 ## Samsung
 
 This is developed against a Galaxy A73, and Samsung's software is more
@@ -185,4 +237,12 @@ substitute for care from an actual person.
 
 ## Licence
 
-MIT.
+MIT, for the code here.
+
+Two things bundled into the app are not this repository's and keep their own
+licences, whose texts are in `third_party/`:
+
+- IBM Plex Sans Thai and IBM Plex Mono, in `app/src/main/res/font`, under the
+  SIL Open Font License 1.1
+- icons from Lucide, redrawn as vector drawables in `app/src/main/res/drawable`
+  (the `ic_` files other than `ic_ring`, `ic_done` and `ic_notify`), under ISC

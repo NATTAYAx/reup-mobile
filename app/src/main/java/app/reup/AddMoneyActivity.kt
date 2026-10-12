@@ -13,6 +13,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import app.reup.core.expenseLabel
 import app.reup.sync.Category
 import app.reup.sync.ExpenseDraft
 import app.reup.sync.IncomeDraft
@@ -106,9 +107,40 @@ class AddMoneyActivity : Activity() {
     private var recent: List<MoneyEntry> = emptyList()
     /** The row being rewritten, or null when this is a new one. */
     private var editing: MoneyEntry? = null
+
+    /**
+     * Opened from the money tab to change one row, rather than to write new
+     * ones. Saving or cancelling then goes back to that tab instead of leaving
+     * an empty form to fill in, which is not what anybody came here for.
+     */
+    private var editOnly = false
     private var category = "other"
     private var currency = CURRENCY_FALLBACK
     private var currencyKnown = false
+
+    /**
+     * The unit a slip was printed in, when this screen was opened from one.
+     *
+     * It wins over the phone's own currency for the row being written, because
+     * the slip is what the row is a copy of: a receipt in dollars filed under
+     * baht is wrong by a factor nobody sees. [storedCurrency] is kept beside it
+     * only so the screen can say when the two differ.
+     */
+    private var slipCurrency: String? = null
+    private var storedCurrency: String? = null
+
+    /** The slip named money several currencies share, and the unit is a guess. */
+    private var slipUnsure = false
+
+    /**
+     * The reference of the slip this form was filled in from, written to
+     * slip_ref with the row. Its unique index is what stops one slip becoming
+     * two rows — scanned by hand and also saved from the shade, say.
+     */
+    private var slipRef: String? = null
+
+    /** The waiting slip this form came from, by gallery id; -1 when none. */
+    private var slipId = -1L
     private var incoming = false
     private var busy = false
     private var blocked = false
@@ -129,15 +161,26 @@ class AddMoneyActivity : Activity() {
         dateBox = field("วันที่", 0)
         dateBox.setText(LocalDate.now().toString())
 
-        // Filled in by whoever opened this screen, which right now is the slip
-        // reader. It hands over a reading rather than writing a row of its own,
-        // because the gate into the ledger is the save button on this screen
-        // and the finance layer has exactly one gate on purpose. A slip that
-        // saved itself would be a second way in, holding numbers a recogniser
-        // guessed at, which is the one kind of row nobody would think to check.
+        // Filled in by whoever opened this screen: the slip reader, or a slip
+        // that arrived on its own and needed a look. Either way it hands over a
+        // reading rather than writing a row, because a row is written when a
+        // person presses save with the numbers in front of them. A slip that
+        // saved itself would be a way in holding numbers a recogniser guessed
+        // at, which is the one kind of row nobody would think to check.
+        //
+        // There are two save buttons now, this one and the one on the
+        // notification of a slip with nothing left to check (PendingSlips.save).
+        // Both are a person pressing save on a reading they can see, and both go
+        // through the same repository call with the same validation — so it is
+        // still one gate, with a second door handle.
         intent.getStringExtra(EXTRA_AMOUNT)?.let { if (it.isNotBlank()) amountBox.setText(it) }
         intent.getStringExtra(EXTRA_DATE)?.let { if (it.isNotBlank()) dateBox.setText(it) }
         intent.getStringExtra(EXTRA_NOTE)?.let { if (it.isNotBlank()) noteBox.setText(it) }
+        slipCurrency = intent.getStringExtra(EXTRA_CURRENCY)?.trim()?.uppercase()
+            ?.takeIf { c -> c.length == 3 && c.all { it in 'A'..'Z' } }
+        slipUnsure = intent.getBooleanExtra(EXTRA_CURRENCY_UNSURE, false)
+        slipRef = intent.getStringExtra(EXTRA_SLIP_REF)?.trim()?.takeIf { it.isNotEmpty() }
+        slipId = intent.getLongExtra(EXTRA_SLIP_ID, -1L)
 
         unitLabel = label("")
         unitNote = note("")
@@ -165,6 +208,9 @@ class AddMoneyActivity : Activity() {
         recentBox.orientation = LinearLayout.VERTICAL
 
         status = Ui.status(this)
+        // Why a slip that arrived on its own could not be saved from the shade,
+        // where the box it is about is a few centimetres below.
+        intent.getStringExtra(EXTRA_SLIP_CHECK)?.let { status.text = it }
 
         val screen = Ui.sticky(this)
         val column = screen.column
@@ -231,22 +277,34 @@ class AddMoneyActivity : Activity() {
     private fun load() {
         busy = true
         render()
+        val wanted = intent.getStringExtra(EXTRA_EDIT_UID)
         scope.launch {
+            var target: MoneyEntry? = null
             try {
                 val repo = Repo.money(this@AddMoneyActivity)
                 categories = repo.categories()
                 category = categories.firstOrNull()?.key ?: "other"
+                // The category a slip's memo named, when it is one of these.
+                intent.getStringExtra(EXTRA_CATEGORY)?.let { k -> if (categories.any { it.key == k }) category = k }
                 val stored = repo.currency()
-                currencyKnown = stored != null
-                currency = stored ?: CURRENCY_FALLBACK
+                storedCurrency = stored
+                currencyKnown = slipCurrency != null || stored != null
+                currency = slipCurrency ?: stored ?: CURRENCY_FALLBACK
                 buildChips()
                 refresh(repo)
+                // The list the tab drew from is the same twenty rows, so the
+                // one that was tapped is in it.
+                target = wanted?.let { uid -> recent.firstOrNull { it.uid == uid } }
             } catch (e: Exception) {
                 status.text = "เปิดฐานข้อมูลไม่ได้ ${e.message ?: e.toString()}"
                 blocked = true
             } finally {
                 busy = false
                 render()
+            }
+            target?.let {
+                editOnly = true
+                startEdit(it)
             }
         }
     }
@@ -303,7 +361,9 @@ class AddMoneyActivity : Activity() {
     private fun showRecent(today: String) {
         recentBox.removeAllViews()
         if (recent.isEmpty()) {
-            recentBox.addView(note(if (currencyKnown) NO_ENTRIES else NO_ENTRIES_YET), rowParams())
+            // Synced or not is the stored setting's question. A unit read off a
+            // slip says nothing about whether this phone has met the computer.
+            recentBox.addView(note(if (storedCurrency != null) NO_ENTRIES else NO_ENTRIES_YET), rowParams())
             return
         }
         for (e in recent) {
@@ -363,7 +423,7 @@ class AddMoneyActivity : Activity() {
             return listOf(from, memo).filter { it.isNotEmpty() }.joinToString("  ").ifEmpty { INCOMING }
         }
         val c = categories.firstOrNull { it.key == e.tag }
-        val label = c?.let { it.emoji + " " + (it.label ?: it.key) } ?: (e.tag ?: "")
+        val label = c?.let { it.emoji + " " + expenseLabel(it.key, it.label) } ?: (e.tag ?: "")
         return listOf(label, memo).filter { it.isNotEmpty() }.joinToString("  ").ifEmpty { OUTGOING }
     }
 
@@ -425,6 +485,10 @@ class AddMoneyActivity : Activity() {
 
     /** Back to writing a new row, leaving the old one exactly as it was. */
     private fun cancelEdit() {
+        if (editOnly) {
+            finish()
+            return
+        }
         editing = null
         amountBox.setText("")
         noteBox.setText("")
@@ -435,6 +499,7 @@ class AddMoneyActivity : Activity() {
             try {
                 val repo = Repo.money(this@AddMoneyActivity)
                 val stored = repo.currency()
+                storedCurrency = stored
                 currencyKnown = stored != null
                 currency = stored ?: CURRENCY_FALLBACK
             } catch (_: Exception) {
@@ -500,7 +565,7 @@ class AddMoneyActivity : Activity() {
                 categoryRow.addView(row, rowParams())
                 row = newChipRow()
             }
-            val b = Ui.chip(this, c.emoji + " " + (c.label ?: c.key)) {
+            val b = Ui.chip(this, c.emoji + " " + expenseLabel(c.key, c.label)) {
                 category = c.key
                 render()
             }
@@ -549,8 +614,17 @@ class AddMoneyActivity : Activity() {
         Ui.select(this, inButton, incoming)
 
         unitLabel.text = "จำนวนเงิน ($currency)"
-        unitNote.text = if (currencyKnown) "" else UNIT_GUESSED
-        unitNote.visibility = if (currencyKnown) TextView.GONE else TextView.VISIBLE
+        val fromSlip = !edit && slipCurrency != null && currency == slipCurrency
+        val unitText = when {
+            fromSlip && storedCurrency != null && storedCurrency != currency ->
+                "สกุลเงินตามสลิป ไม่ใช่ $storedCurrency ที่ใช้ปกติ เช็คก่อนบันทึก"
+            !edit && slipUnsure ->
+                "สลิปใช้สัญลักษณ์เงินที่หลายประเทศใช้ร่วมกัน บอกไม่ได้ว่าเป็น $currency จริงไหม เช็คก่อนบันทึก"
+            !currencyKnown -> UNIT_GUESSED
+            else -> ""
+        }
+        unitNote.text = unitText
+        unitNote.visibility = if (unitText.isEmpty()) TextView.GONE else TextView.VISIBLE
 
         val show = { v: android.view.View, on: Boolean ->
             v.visibility = if (on) android.view.View.VISIBLE else android.view.View.GONE
@@ -580,6 +654,9 @@ class AddMoneyActivity : Activity() {
         category = category,
         note = note(),
         date = date(),
+        // A new row only. An edit never moves a row onto a different slip; see
+        // EXPENSE_EDITABLE, which has no slip_ref for that reason.
+        slipRef = if (editing == null) slipRef else null,
     )
 
     private fun income() = IncomeDraft(
@@ -611,6 +688,14 @@ class AddMoneyActivity : Activity() {
             try {
                 val repo = Repo.money(this@AddMoneyActivity)
                 val target = editing
+                // Asked before writing, so the answer is a sentence rather than
+                // the unique index refusing in words nobody can read.
+                val ref = slipRef
+                if (target == null && !incoming && ref != null && repo.slipRecorded(ref)) {
+                    status.text = SLIP_ALREADY
+                    forgetSlip()
+                    return@launch
+                }
                 val refused = when {
                     target != null && incoming -> repo.editIncome(target.uid, income())
                     target != null -> repo.editExpense(target.uid, expense(), known)
@@ -636,6 +721,12 @@ class AddMoneyActivity : Activity() {
                 // category and the date are kept, because the next thing written
                 // down at a counter is usually the same kind of thing.
                 val wasEdit = editing != null
+                // Whichever way it was saved, the slip it came from is dealt with.
+                if (!wasEdit) forgetSlip()
+                if (wasEdit && editOnly) {
+                    finish()
+                    return@launch
+                }
                 editing = null
                 amountBox.setText("")
                 noteBox.setText("")
@@ -650,6 +741,19 @@ class AddMoneyActivity : Activity() {
                 render()
             }
         }
+    }
+
+    /**
+     * The slip this form came from is dealt with: off the waiting list, out of
+     * the shade, and not attached to whatever is typed in next.
+     */
+    private fun forgetSlip() {
+        if (slipId >= 0L) {
+            PendingSlips.remove(this, slipId)
+            Notifications.cancelSlip(this, slipId)
+        }
+        slipId = -1L
+        slipRef = null
     }
 
     /**
@@ -701,6 +805,29 @@ class AddMoneyActivity : Activity() {
         const val EXTRA_AMOUNT = "app.reup.amount"
         const val EXTRA_DATE = "app.reup.date"
         const val EXTRA_NOTE = "app.reup.note"
+
+        /** An ISO code read off a slip: THB, USD, JPY. */
+        const val EXTRA_CURRENCY = "app.reup.currency"
+
+        /** The slip's money sign is one several currencies share ($, ¥, kr). */
+        const val EXTRA_CURRENCY_UNSURE = "app.reup.currency_unsure"
+
+        /** Open one existing row for editing, by uid. Saving goes back. */
+        const val EXTRA_EDIT_UID = "app.reup.edit_uid"
+
+        /** A category key a slip's memo named. Ignored when it is not one of the chips. */
+        const val EXTRA_CATEGORY = "app.reup.category"
+
+        /** The slip's reference, for slip_ref. */
+        const val EXTRA_SLIP_REF = "app.reup.slip_ref"
+
+        /** A slip that arrived on its own, by gallery id. Saving takes it off the list. */
+        const val EXTRA_SLIP_ID = "app.reup.slip_id"
+
+        /** Why that slip could not be saved with one press, as a sentence. */
+        const val EXTRA_SLIP_CHECK = "app.reup.slip_check"
+
+        private const val SLIP_ALREADY = "สลิปใบนี้บันทึกไปแล้ว"
 
 
         private const val UNIT_GUESSED =

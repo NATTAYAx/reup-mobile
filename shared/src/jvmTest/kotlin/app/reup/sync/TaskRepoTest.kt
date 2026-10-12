@@ -58,6 +58,12 @@ class TaskRepoTest {
         "ring_in_quiet",
         "is_active",
         "deleted",
+        // What a card shows. Not needed for anything to ring, but the home
+        // screen reads them, and the day one is renamed the screen goes blank
+        // rather than wrong.
+        "category",
+        "completed_until",
+        "completed_at",
     )
 
     /**
@@ -137,6 +143,33 @@ class TaskRepoTest {
         assertEquals(null, t.notifyBeforeMin)
         assertEquals(null, t.pausedUntil)
         assertEquals("งาน", labelFrom(bare))
+    }
+
+    @Test
+    fun `a card reads what it shows, and a bare row still makes one`() {
+        val full: DbRow = mapOf(
+            "uid" to SyncValue.Text("u-9"),
+            "name" to SyncValue.Text("Genshin รายวัน"),
+            "category" to SyncValue.Text("game"),
+            "completed_until" to SyncValue.Text("2026-10-09T21:00:00.000Z"),
+            "completed_at" to SyncValue.Text("2026-10-08T03:12:00.000Z"),
+        )
+        assertEquals(
+            "u-9" to TaskInfo(
+                "Genshin รายวัน", "game", "2026-10-09T21:00:00.000Z", "2026-10-08T03:12:00.000Z",
+            ),
+            taskInfoFrom(full),
+        )
+
+        // Blank is the same as absent: a category nobody set is not a category
+        // called "", and a tick cleared on the desktop arrives as null.
+        val bare: DbRow = mapOf(
+            "uid" to SyncValue.Text("u-10"),
+            "category" to SyncValue.Text(""),
+            "completed_until" to SyncValue.Null,
+        )
+        assertEquals("u-10" to TaskInfo("งาน", null, null, null), taskInfoFrom(bare))
+        assertEquals(null, taskInfoFrom(mapOf("name" to SyncValue.Text("no uid"))))
     }
 
     @Test

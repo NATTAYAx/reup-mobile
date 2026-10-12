@@ -33,7 +33,8 @@ class FaceTest {
 
     @Test
     fun `the header names the day in Thai`() {
-        assertEquals("วันอาทิตย์ 30 สิงหาคม", headerDate(now, bkk))
+        // No วัน in front: the title under it is วันนี้.
+        assertEquals("อาทิตย์ 30 สิงหาคม", headerDate(now, bkk))
     }
 
     @Test
@@ -218,118 +219,230 @@ class FaceTest {
 
     // ── the shape of the list ────────────────────────────────────────────────
 
+    /** 04:00 Bangkok on the day [days] after Sunday the 30th. */
+    private fun fourAm(days: Int): Instant =
+        Instant.fromEpochSeconds(Instant.parse("2026-08-29T21:00:00Z").epochSeconds + days * 86_400L)
+
     private fun row(
         id: String,
         at: Instant?,
         silent: Boolean = false,
         done: Boolean = false,
-    ) = HomeRow(id, id, at, silent, done)
+        doneToday: Boolean = false,
+        resetAt: Instant? = null,
+        paused: Boolean = false,
+        cadence: String? = null,
+        category: String? = null,
+        recurring: Boolean = true,
+    ) = HomeRow(id, id, at, silent, done, resetAt, doneToday, paused, cadence, category, recurring)
 
     @Test
-    fun `rows are cut into days, in the order they arrived`() {
-        val sections = homeSections(
-            listOf(
-                row("a", plus(3600)),
-                row("b", plus(7200)),
-                row("c", plus(86_400)),
-            ),
+    fun `the soonest thing due today gets the card and is not drawn twice`() {
+        val face = todayFace(
+            listOf(row("a", plus(3600)), row("b", plus(7200)), row("c", fourAm(1))),
             now, bkk,
         )
-        assertEquals(listOf("วันนี้", "พรุ่งนี้"), sections.map { it.title })
-        assertEquals(listOf("a", "b"), sections[0].rows.map { it.id })
-        assertEquals(listOf("c"), sections[1].rows.map { it.id })
+        assertEquals("a", face.next?.id)
+        assertEquals(null, face.calm)
+        assertEquals(listOf("ที่เหลือวันนี้", "พรุ่งนี้ · จันทร์ 31 ส.ค."), face.sections.map { it.title })
+        assertEquals(listOf("b"), face.sections[0].rows.map { it.id })
+        assertEquals(listOf("c"), face.sections[1].rows.map { it.id })
     }
 
     @Test
-    fun `a reason every row shares is said once, at the top`() {
-        // The four dailies in the screenshot: same reset, same shift, same
+    fun `tomorrow's first round is not next tonight`() {
+        // Nothing left today: the card turns into words, and the round it
+        // names is the one the list below starts with.
+        val face = todayFace(listOf(row("Genshin", fourAm(1)), row("b", fourAm(2))), now, bkk)
+        assertEquals(null, face.next)
+        assertEquals(
+            Calm("วันนี้ไม่มีอะไรรีเซ็ต", "รอบถัดไปคือพรุ่งนี้ 04:00", "Genshin"),
+            face.calm,
+        )
+        assertEquals(listOf("พรุ่งนี้ · จันทร์ 31 ส.ค.", "อังคาร 1 ก.ย."), face.sections.map { it.title })
+    }
+
+    @Test
+    fun `the next round further out is named by its weekday, then by its date`() {
+        assertEquals("รอบถัดไปคือวันพุธ 04:00", todayFace(listOf(row("a", fourAm(3))), now, bkk).calm?.nextAt)
+        assertEquals("รอบถัดไปคือวันที่ 8 ก.ย. 04:00", todayFace(listOf(row("a", fourAm(9))), now, bkk).calm?.nextAt)
+    }
+
+    @Test
+    fun `a day with everything ticked says so rather than that nothing was due`() {
+        val face = todayFace(
+            listOf(row("b", fourAm(1)), row("a", fourAm(1), done = true, doneToday = true)),
+            now, bkk,
+        )
+        assertEquals(null, face.next)
+        assertEquals("วันนี้ทำครบแล้ว", face.calm?.title)
+        assertEquals(listOf("ทำแล้ววันนี้", "พรุ่งนี้ · จันทร์ 31 ส.ค."), face.sections.map { it.title })
+    }
+
+    @Test
+    fun `a row ticked today stays with today, below what is left`() {
+        val face = todayFace(
+            listOf(row("a", plus(3600)), row("b", plus(7200)), row("d", fourAm(1), done = true, doneToday = true)),
+            now, bkk,
+        )
+        assertEquals("ที่เหลือวันนี้", face.sections[0].title)
+        assertEquals(listOf("b", "d"), face.sections[0].rows.map { it.id })
+    }
+
+    @Test
+    fun `a weekly ticked days ago waits at the end, still on screen`() {
+        // Hiding a finished thing is how a mis-tap becomes permanent.
+        val face = todayFace(
+            listOf(row("a", plus(3600)), row("u", null), row("w", fourAm(4), done = true)),
+            now, bkk,
+        )
+        assertEquals(listOf("ไม่มีกำหนด", "ทำแล้ว รอรอบใหม่"), face.sections.map { it.title })
+        assertEquals(listOf("w"), face.sections[1].rows.map { it.id })
+    }
+
+    @Test
+    fun `a reason every waiting row shares is said once, at the top`() {
+        // The four dailies in the screenshot: same reset, same quiet, same
         // sentence four times at full width.
-        val sections = homeSections(
+        val face = todayFace(
             listOf(
-                row("a", plus(86_400), silent = true),
-                row("b", plus(86_400), silent = true),
-                row("c", plus(86_400), silent = true),
+                row("a", fourAm(1), silent = true, cadence = "ทุกวัน"),
+                row("b", fourAm(1), silent = true, cadence = "ทุกวัน"),
+                row("c", fourAm(1), silent = true, cadence = "ทุกวัน"),
             ),
             now, bkk,
         )
-        assertEquals("ช่วงเงียบ ไม่มีเสียง", sections[0].note)
-        for (r in sections[0].rows) assertEquals("", rowNote(r, now, hoisted = true))
+        assertEquals(QUIET_NOTE, face.sections[0].note)
+        for (r in face.sections[0].rows) assertEquals("ทุกวัน", rowLine(r, now, bkk, hoisted = true))
     }
 
     @Test
     fun `a reason only one row has stays on that row`() {
-        val sections = homeSections(
-            listOf(
-                row("a", plus(86_400), silent = true),
-                row("b", plus(86_400)),
-            ),
+        val face = todayFace(
+            listOf(row("a", fourAm(1), silent = true), row("b", fourAm(1))),
             now, bkk,
         )
-        assertEquals(null, sections[0].note)
-        assertEquals("ช่วงเงียบ ไม่มีเสียง", rowNote(sections[0].rows[0], now, hoisted = false))
-        assertEquals("", rowNote(sections[0].rows[1], now, hoisted = false))
+        assertEquals(null, face.sections[0].note)
+        assertEquals(QUIET_NOTE, rowLine(face.sections[0].rows[0], now, bkk, hoisted = false))
+        assertEquals(null, rowLine(face.sections[0].rows[1], now, bkk, hoisted = false))
     }
 
     @Test
     fun `one row on its own keeps its own reason`() {
         // "all of them" is true of a single row too, and hoisting there moves a
         // word up one line for nothing.
-        val sections = homeSections(listOf(row("a", plus(86_400), silent = true)), now, bkk)
-        assertEquals(null, sections[0].note)
+        val face = todayFace(listOf(row("a", fourAm(1), silent = true)), now, bkk)
+        assertEquals(null, face.sections[0].note)
     }
 
     @Test
-    fun `the countdown is dropped once the heading already says the day`() {
-        // Under พรุ่งนี้, "อีก 23 ชม. 10 นาที" is the same fact spelled longer.
-        assertEquals("อีก 3 ชม.", rowNote(row("a", plus(3 * 3600)), now, hoisted = false))
-        assertEquals("", rowNote(row("a", plus(30 * 3600)), now, hoisted = false))
-    }
-
-    @Test
-    fun `a task with nothing queued says so instead of showing a blank`() {
-        val sections = homeSections(listOf(row("a", null)), now, bkk)
-        assertEquals(listOf("ไม่มีกำหนด"), sections.map { it.title })
-        assertEquals("ไม่มีรอบถัดไป", rowNote(sections[0].rows[0], now, hoisted = false))
-        assertEquals("", rowClock(sections[0].rows[0], bkk))
-    }
-
-    @Test
-    fun `finished rows sink into their own section whatever time they hold`() {
-        val sections = homeSections(
-            listOf(
-                row("done", plus(60), done = true),
-                row("later", plus(7200)),
-            ),
-            now, bkk,
+    fun `an empty list is calm with nothing to point at`() {
+        assertEquals(
+            TodayFace(null, Calm("วันนี้ไม่มีอะไรรีเซ็ต", null, null), emptyList()),
+            todayFace(emptyList(), now, bkk),
         )
-        assertEquals(listOf("วันนี้", "ติ๊กแล้ว"), sections.map { it.title })
-        assertEquals(listOf("later"), sections[0].rows.map { it.id })
-        // The tick is the whole message; a countdown under it is noise about
-        // something already dealt with.
-        assertEquals("", rowNote(sections[1].rows[0], now, hoisted = false))
     }
 
     @Test
-    fun `undated rows sit above finished ones`() {
-        val sections = homeSections(
-            listOf(
-                row("d", plus(60), done = true),
-                row("u", null),
-                row("t", plus(3600)),
-            ),
-            now, bkk,
+    fun `a ticked row says when it comes back, at the precision that is still clear`() {
+        assertEquals("ทำแล้ว · รอบใหม่ 04:00", rowLine(row("a", fourAm(1), done = true), now, bkk, false))
+        assertEquals("ทำแล้ว · รอบใหม่ พ. 04:00", rowLine(row("a", fourAm(3), done = true), now, bkk, false))
+        assertEquals("ทำแล้ว · รอบใหม่ 9 ก.ย.", rowLine(row("a", fourAm(10), done = true), now, bkk, false))
+        // A one-off has nothing to come back to - even when its deadline is
+        // still queued for later today.
+        assertEquals("ทำแล้ว", rowLine(row("a", null, done = true), now, bkk, false))
+        assertEquals("ทำแล้ว", rowLine(row("a", plus(8 * 3600), done = true, recurring = false), now, bkk, false))
+    }
+
+    @Test
+    fun `the kinds that come back are the four the desktop calls recurring`() {
+        for (t in listOf(ResetType.DAILY, ResetType.WEEKLY, ResetType.BIWEEKLY, ResetType.CUSTOM_DAYS)) {
+            assertEquals(true, recurs(ResetSpec(t)), t)
+        }
+        for (t in listOf(ResetType.ONE_TIME, ResetType.EVENT_WINDOW, ResetType.SPECIFIC_DATE, "lunar")) {
+            assertEquals(false, recurs(ResetSpec(t)), t)
+        }
+    }
+
+    @Test
+    fun `the reset is what comes back, not the warning before it`() {
+        val warned = row("a", Instant.parse("2026-08-30T20:30:00Z"), done = true, resetAt = fourAm(1))
+        assertEquals("ทำแล้ว · รอบใหม่ 04:00", rowLine(warned, now, bkk, false))
+    }
+
+    @Test
+    fun `a waiting row says how often, what kind, and anything unusual`() {
+        val r = row("a", fourAm(1), cadence = "ทุกวัน", category = "game")
+        assertEquals("ทุกวัน · เกม", rowLine(r, now, bkk, false))
+        assertEquals(
+            "ทุกวัน · เกม · พักอยู่ · ไม่มีเสียง",
+            rowLine(r.copy(paused = true, silent = true), now, bkk, false),
         )
-        assertEquals(listOf("วันนี้", "ไม่มีกำหนด", "ติ๊กแล้ว"), sections.map { it.title })
+        assertEquals(null, rowLine(row("b", fourAm(1)), now, bkk, false))
     }
 
     @Test
-    fun `an empty list is an empty list, not a section of nothing`() {
-        assertEquals(emptyList(), homeSections(emptyList(), now, bkk))
+    fun `the big card counts down, which the rows do not`() {
+        assertEquals("10:33 · อีก 33 นาที", heroLine(row("a", plus(33 * 60)), now, bkk))
+        assertEquals("10:33 · อีก 33 นาที · ไม่มีเสียง", heroLine(row("a", plus(33 * 60), silent = true), now, bkk))
+    }
+
+    @Test
+    fun `a heading carries the date the day word stands for`() {
+        assertEquals("วันนี้", dayTitle(plus(3600), now, bkk))
+        assertEquals("พรุ่งนี้ · จันทร์ 31 ส.ค.", dayTitle(fourAm(1), now, bkk))
+        assertEquals("ศุกร์ 4 ก.ย.", dayTitle(fourAm(5), now, bkk))
+    }
+
+    @Test
+    fun `half past midnight is headed tomorrow, even though UTC says otherwise`() {
+        val lateSunday = Instant.parse("2026-08-30T16:00:00Z")   // 23:00 local
+        val earlyMonday = Instant.parse("2026-08-30T17:30:00Z")  // 00:30 local, next day
+        assertEquals("พรุ่งนี้ · จันทร์ 31 ส.ค.", dayTitle(earlyMonday, lateSunday, bkk))
     }
 
     @Test
     fun `the clock column is the wall clock of the row`() {
         assertEquals("09:00", rowClock(row("a", Instant.parse("2026-08-31T02:00:00Z")), bkk))
+        assertEquals("", rowClock(row("a", null), bkk))
+    }
+
+    @Test
+    fun `how often, in words, with the one useful fact a week has`() {
+        assertEquals("ทุกวัน", cadencePhrase(ResetSpec(ResetType.DAILY)))
+        assertEquals("ทุกวันจันทร์", cadencePhrase(ResetSpec(ResetType.WEEKLY, resetDay = 1)))
+        assertEquals("ทุกวันอาทิตย์", cadencePhrase(ResetSpec(ResetType.WEEKLY, resetDay = 0)))
+        assertEquals("ทุกสัปดาห์", cadencePhrase(ResetSpec(ResetType.WEEKLY)))
+        assertEquals("ทุก 2 สัปดาห์", cadencePhrase(ResetSpec(ResetType.BIWEEKLY)))
+        assertEquals("ทุก 3 วัน", cadencePhrase(ResetSpec(ResetType.CUSTOM_DAYS, resetIntervalDays = 3)))
+        assertEquals("ทุกวัน", cadencePhrase(ResetSpec(ResetType.CUSTOM_DAYS, resetIntervalDays = 1)))
+        assertEquals("รอบกำหนดเอง", cadencePhrase(ResetSpec(ResetType.CUSTOM_DAYS)))
+        assertEquals("กิจกรรมจำกัดเวลา", cadencePhrase(ResetSpec(ResetType.EVENT_WINDOW)))
+        assertEquals("ครั้งเดียว", cadencePhrase(ResetSpec(ResetType.SPECIFIC_DATE)))
+        assertEquals("ครั้งเดียว", cadencePhrase(ResetSpec(ResetType.ONE_TIME)))
+        // A newer desktop can invent a type. Saying nothing beats guessing.
+        assertEquals(null, cadencePhrase(ResetSpec("lunar")))
+    }
+
+    @Test
+    fun `the four categories are named as the desktop names them`() {
+        assertEquals("เกม", categoryName("game"))
+        assertEquals("การเรียน", categoryName("school"))
+        assertEquals("งาน", categoryName("work"))
+        assertEquals("ส่วนตัว", categoryName("personal"))
+        assertEquals(null, categoryName("hobby"))
+        assertEquals(null, categoryName(null))
+    }
+
+    @Test
+    fun `ticked today is decided on the wall clock`() {
+        // Bangkok midnight is 17:00 UTC the day before.
+        assertEquals(true, tickedToday("2026-08-30T01:00:00.000Z", now, bkk))
+        assertEquals(true, tickedToday("2026-08-29T17:00:00.000Z", now, bkk))
+        assertEquals(false, tickedToday("2026-08-29T16:59:59.999Z", now, bkk))
+        assertEquals(false, tickedToday(null, now, bkk))
+        assertEquals(false, tickedToday("", now, bkk))
+        assertEquals(false, tickedToday("yesterday-ish", now, bkk))
     }
 
     // ── the phone it is actually running on ─────────────────────────────────
