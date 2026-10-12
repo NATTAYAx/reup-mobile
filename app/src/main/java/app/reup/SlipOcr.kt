@@ -4,11 +4,19 @@ package app.reup
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.net.Uri
 import android.util.Log
+import app.reup.sync.MemoRead
 import app.reup.sync.SlipHints
+import app.reup.sync.SlipReading
+import app.reup.sync.betterMemo
 import app.reup.sync.binarizeForOcr
+import app.reup.sync.binarizeLine
 import app.reup.sync.lumaOf
+import app.reup.sync.memoCut
+import app.reup.sync.memoStart
+import app.reup.sync.readSlip
 import app.reup.sync.slipSampleSize
 import com.googlecode.tesseract.android.TessBaseAPI
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +40,20 @@ sealed interface SlipRead {
         val width: Int,
         val height: Int,
         val threshold: Int,
-    ) : SlipRead
+        /**
+         * The memo after its line was read a second time on its own — see
+         * SlipOcr.memoAgain — or null when there was no memo to read again.
+         */
+        val memo: String? = null,
+        /** That second reading as the recogniser gave it, for the scan screen. */
+        val memoLine: String? = null,
+    ) : SlipRead {
+        /** What the rules make of [text], with the memo the second reading settled on. */
+        fun reading(hints: SlipHints): SlipReading {
+            val r = readSlip(text, hints)
+            return if (memo != null && r.memo != null) r.copy(memo = memo) else r
+        }
+    }
 
     /** No language data. [present] is whatever is in assets/tessdata instead. */
     data class MissingData(val present: String) : SlipRead
@@ -69,6 +90,15 @@ sealed interface SlipRead {
  * SlipImage.kt before they reach Tesseract, came back with every field right.
  * That step is shared code with its own tests; this file only hands it the
  * pixels.
+ *
+ * ─── AND WHY THE MEMO IS READ TWICE ─────────────────────────────────────────
+ *
+ * One threshold suits the whole slip and not every line on it. On a real
+ * Krungthai slip it left the loopless ท of ทดสอบ101 looking like เท, and the
+ * note said เทดสอบ101. The memo is the one line no rule can check, so its
+ * words are cut out of the grey picture after the page is read, thresholded
+ * on their own and read again as a single line. [memoAgain] does that and
+ * SlipText's betterMemo decides between the two.
  *
  * ─── WHICH LANGUAGES ────────────────────────────────────────────────────────
  *
@@ -129,14 +159,16 @@ object SlipOcr {
             // text looks for writing anywhere, which is what a slip is. It
             // finds more nonsense too, and SlipText refuses to guess from it.
             tess.pageSegMode = TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
-            val (black, threshold) = blackAndWhite(bitmap)
+            val grey = greyOf(bitmap)
+            val (black, threshold) = blackAndWhite(bitmap, grey.copyOf())
             page = black
             tess.setImage(black)
             val text = tess.utF8Text ?: ""
             if (text.isBlank()) {
                 SlipRead.NoText
             } else {
-                SlipRead.Ok(text, joined, bitmap.width, bitmap.height, threshold)
+                val (memo, line) = memoAgain(tess, grey, black.width, black.height, text)
+                SlipRead.Ok(text, joined, bitmap.width, bitmap.height, threshold, memo, line)
             }
         } catch (e: Exception) {
             Log.e(TAG, "could not read the image", e)
@@ -156,14 +188,14 @@ object SlipOcr {
     }
 
     /**
-     * The picture as black writing on white, and the grey level that split it.
+     * The picture in grey, one byte a pixel.
      *
-     * Written into [source] itself when it can be (a mutable ARGB_8888 bitmap,
-     * which is how the scan screen decodes it), so a large screenshot is not
-     * held in memory twice. One row at a time either way: an IntArray for the
-     * whole of a 1260 × 2750 screenshot would be fourteen megabytes for nothing.
+     * One row at a time: an IntArray for the whole of a 1260 × 2750 screenshot
+     * would be fourteen megabytes for nothing. The grey itself is kept — three
+     * and a half megabytes for that screenshot — because the memo's line is
+     * cut out of it again after the page has been read; see [memoAgain].
      */
-    private fun blackAndWhite(source: Bitmap): Pair<Bitmap, Int> {
+    private fun greyOf(source: Bitmap): ByteArray {
         val w = source.width
         val h = source.height
         val luma = ByteArray(w * h)
@@ -173,6 +205,21 @@ object SlipOcr {
             val base = y * w
             for (x in 0 until w) luma[base + x] = lumaOf(row[x]).toByte()
         }
+        return luma
+    }
+
+    /**
+     * The picture as black writing on white, and the grey level that split it.
+     *
+     * [luma] is the picture's grey, which is turned black and white in place.
+     * Written into [source] itself when it can be (a mutable ARGB_8888 bitmap,
+     * which is how the scan screen decodes it), so a large screenshot is not
+     * held in memory twice more.
+     */
+    private fun blackAndWhite(source: Bitmap, luma: ByteArray): Pair<Bitmap, Int> {
+        val w = source.width
+        val h = source.height
+        val row = IntArray(w)
         val threshold = binarizeForOcr(luma, w, h)
         val target =
             if (source.isMutable && source.config == Bitmap.Config.ARGB_8888) source
@@ -187,6 +234,100 @@ object SlipOcr {
 
     private const val BLACK = -0x1000000
     private const val WHITE = -0x1
+
+    /** One word the page reading found, where it is, how sure, and which line it is on. */
+    private class Word(val text: String, val confidence: Float, val box: Rect, val line: Int) {
+        fun edges(): IntArray = intArrayOf(box.left, box.top, box.right, box.bottom)
+    }
+
+    /**
+     * The memo, settled by reading its line a second time on its own; and that
+     * second reading. Both null when the page has no memo.
+     *
+     * The page went to the recogniser black and white by one threshold for the
+     * whole slip. The memo's words are found on the page by where the
+     * recogniser put them, cut out of [grey] with room around them — memoCut
+     * says how much — given a threshold of their own by binarizeLine, and read
+     * again as one line. SlipText's betterMemo picks between the two readings,
+     * and says why the second one usually wins.
+     *
+     * The words have to be collected before the second reading: setting a new
+     * image throws the page's results away.
+     *
+     * Never throws. A memo that could not be read again is the page's memo,
+     * which is what every slip had before this existed.
+     */
+    private fun memoAgain(tess: TessBaseAPI, grey: ByteArray, w: Int, h: Int, text: String): Pair<String?, String?> {
+        val memo = readSlip(text).memo ?: return null to null
+        return try {
+            var span: List<Word> = emptyList()
+            var before: Word? = null
+            for (words in pageWords(tess).groupBy { it.line }.values) {
+                val k = memoStart(words.map { it.text }, memo)
+                if (k < 0) continue
+                span = words.subList(k, words.size)
+                before = words.getOrNull(k - 1)
+                break
+            }
+            if (span.isEmpty()) return memo to null
+            val (x0, y0, x1, y1) = memoCut(span.map { it.edges() }, before?.edges(), before?.text, w, h)
+            if (x1 - x0 < 8 || y1 - y0 < 8) return memo to null
+            val cw = x1 - x0
+            val ch = y1 - y0
+            val cut = ByteArray(cw * ch)
+            for (y in 0 until ch) System.arraycopy(grey, (y0 + y) * w + x0, cut, y * cw, cw)
+            binarizeLine(cut, cw, ch)
+            val bitmap = Bitmap.createBitmap(cw, ch, Bitmap.Config.ARGB_8888)
+            try {
+                val row = IntArray(cw)
+                for (y in 0 until ch) {
+                    for (x in 0 until cw) row[x] = if (cut[y * cw + x].toInt() == 0) BLACK else WHITE
+                    bitmap.setPixels(row, 0, cw, 0, y, cw, 1)
+                }
+                tess.pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_LINE
+                tess.setImage(bitmap)
+                val again = tess.utF8Text ?: ""
+                val sure = tess.meanConfidence().toFloat()
+                val page = MemoRead(memo, span.map { it.confidence }.average().toFloat())
+                (betterMemo(page, MemoRead(again, sure)) ?: memo) to again
+            } finally {
+                bitmap.recycle()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "could not read the memo a second time", e)
+            memo to null
+        } catch (e: OutOfMemoryError) {
+            // The page is read already. Losing it over the memo would be the
+            // wrong way round.
+            Log.w(TAG, "out of memory reading the memo a second time", e)
+            memo to null
+        }
+    }
+
+    /** Every word of the page reading, in reading order, each with the number of its line. */
+    private fun pageWords(tess: TessBaseAPI): List<Word> {
+        val out = ArrayList<Word>()
+        val it = tess.resultIterator ?: return out
+        try {
+            it.begin()
+            var line = -1
+            do {
+                if (it.isAtBeginningOf(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE)) line++
+                val t = it.getUTF8Text(TessBaseAPI.PageIteratorLevel.RIL_WORD)
+                if (!t.isNullOrBlank()) {
+                    out += Word(
+                        t.trim(),
+                        it.confidence(TessBaseAPI.PageIteratorLevel.RIL_WORD),
+                        it.getBoundingRect(TessBaseAPI.PageIteratorLevel.RIL_WORD),
+                        maxOf(line, 0),
+                    )
+                }
+            } while (it.next(TessBaseAPI.PageIteratorLevel.RIL_WORD))
+        } finally {
+            it.delete()
+        }
+        return out
+    }
 
     /**
      * The image, at full size unless it is a photograph.

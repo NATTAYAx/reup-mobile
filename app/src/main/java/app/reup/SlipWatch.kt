@@ -14,7 +14,6 @@ import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
 import app.reup.core.expenseLabel
-import app.reup.sync.readSlip
 import app.reup.sync.memoCategory
 import app.reup.sync.slipDraft
 import kotlinx.coroutines.CancellationException
@@ -359,13 +358,14 @@ object SlipWatch {
         // Marked read at each way out rather than once up here: a wake stopped
         // between reading and listing must leave the picture unread, or the
         // slip on it is gone.
-        val text = (result as? SlipRead.Ok)?.text
-        if (text == null) {
+        val ok = result as? SlipRead.Ok
+        if (ok == null) {
             markDone(ctx, p)
             return false
         }
+        val text = ok.text
 
-        val reading = readSlip(text, SlipOcr.hints(ctx))
+        val reading = ok.reading(SlipOcr.hints(ctx))
         if (reading.amount == null && "no-amount" in reading.problems) {
             markDone(ctx, p)
             return false

@@ -73,6 +73,34 @@ class SlipImageTest {
     }
 
     @Test
+    fun `one line is split by its own threshold, not the page's`() {
+        // A memo's line in grey ink a whole page's threshold would have thinned:
+        // paper at 250, strokes at 120, their edges at 170.
+        val w = 40
+        val h = 12
+        val px = page(w, h, 250) { set ->
+            set(5, 3, 35, 9, 170)
+            set(6, 4, 34, 8, 120)
+        }
+        binarizeLine(px, w, h)
+        assertEquals(ink, px[6 * w + 20], "the stroke")
+        assertEquals(paper, px[1 * w + 1], "the paper")
+        // The edge goes with the ink here: on this strip 170 is nearer the
+        // strokes than the paper. On a whole slip it need not be.
+        assertEquals(ink, px[3 * w + 20], "the edge")
+    }
+
+    @Test
+    fun `a line of light writing on a dark band comes out black on white`() {
+        val w = 40
+        val h = 12
+        val px = page(w, h, 40) { set -> set(6, 4, 34, 8, 230) }
+        binarizeLine(px, w, h)
+        assertEquals(ink, px[6 * w + 20], "the writing")
+        assertEquals(paper, px[1 * w + 1], "the band")
+    }
+
+    @Test
     fun `a thin rule across the page is not a band`() {
         // One dark row, edge to edge: a divider. Flipping it would turn the
         // page around it black for that row, which is harmless, and flipping

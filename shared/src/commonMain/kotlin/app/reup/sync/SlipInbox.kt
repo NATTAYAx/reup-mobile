@@ -82,25 +82,59 @@ data class MemoSplit(
  * English memo say "food lunch".
  */
 fun memoCategory(memo: String?, categories: List<Category>): MemoSplit {
-    val text = sameAm(memo?.trim().orEmpty()).replace(Regex("""\s+"""), " ")
+    val text = thaiMarks(sameAm(memo?.trim().orEmpty())).replace(Regex("""\s+"""), " ")
     if (text.isEmpty()) return MemoSplit(null, "")
     val lower = text.lowercase()
     // Positions are carried from one to the other, so they must line up.
     if (lower.length != text.length) return MemoSplit(null, text)
+    val (best, end) = named(lower, categories, exact = true) ?: named(lower, categories, exact = false)
+        ?: return MemoSplit(null, text)
+    val rest = text.substring(end).trimStart(' ', '-', ':', ',', '.', '/', '|', '\u00B7').trim()
+    return MemoSplit(best, rest)
+}
+
+/**
+ * The category [lower] starts with and where its name ends, the longest name
+ * winning.
+ *
+ * Not [exact]: letters only, with the marks over and under them left out and
+ * ฮ read as อ — the recogniser's commonest mistakes on a loopless font, where
+ * ค่าบิล comes back as คาบิล and อาหาร as ฮาหาร. Tried only when no name
+ * matched as written, so a name never loses to one that merely looks like it.
+ */
+private fun named(lower: String, categories: List<Category>, exact: Boolean): Pair<String, Int>? {
+    val (key, at) = if (exact) lower to IntArray(lower.length) { it } else letters(lower)
     var best: String? = null
     var bestLength = 0
+    var bestEnd = 0
     for (c in categories) {
         for (name in namesOf(c)) {
-            val word = sameAm(name.trim()).lowercase()
+            val plain = sameAm(name.trim()).lowercase()
+            val word = if (exact) plain else letters(plain).first
             if (word.length < 2 || word.length <= bestLength) continue
-            if (!lower.startsWith(word) || !endsWord(lower, word.length)) continue
+            if (!key.startsWith(word)) continue
+            // Past the name's last letter and whatever marks that letter has.
+            var end = at[word.length - 1] + 1
+            if (!exact) while (end < lower.length && thaiMark(lower[end])) end++
+            if (!endsWord(lower, end)) continue
             best = c.key
             bestLength = word.length
+            bestEnd = end
         }
     }
-    if (best == null) return MemoSplit(null, text)
-    val rest = text.substring(bestLength).trimStart(' ', '-', ':', ',', '.', '/', '|', '\u00B7').trim()
-    return MemoSplit(best, rest)
+    return best?.let { it to bestEnd }
+}
+
+/** [s] without Thai marks and with ฮ as อ, and where each letter left came from. */
+private fun letters(s: String): Pair<String, IntArray> {
+    val sb = StringBuilder(s.length)
+    val at = IntArray(s.length)
+    for ((i, c) in s.withIndex()) {
+        if (thaiMark(c)) continue
+        at[sb.length] = i
+        sb.append(if (c == '\u0E2E') '\u0E2D' else c)
+    }
+    return sb.toString() to at.copyOf(sb.length)
 }
 
 private val KEY_WORD = Regex("""[a-z]+(?:[ _-][a-z]+)*""")
@@ -121,40 +155,80 @@ private fun endsWord(text: String, n: Int): Boolean {
     return !thaiMark(next)
 }
 
-/** A Thai vowel or tone mark, which belongs to the letter before it. */
-private fun thaiMark(c: Char): Boolean =
-    c == '\u0E31' || c in '\u0E34'..'\u0E3A' || c in '\u0E47'..'\u0E4E'
-
 /** สระอำ written one way, as SlipText spells it: นิคหิต + สระอา is how it is often typed. */
 private fun sameAm(s: String): String = s.replace("\u0E4D\u0E32", "\u0E33")
 
 // ─── who it went to ──────────────────────────────────────────────────────────
 
-/** Titles a Thai slip puts in front of a person's name, longest first. */
-private val TITLES = listOf(
-    "นางสาว", "น.ส.", "นาง", "นาย", "ด.ช.", "ด.ญ.",
-    "mrs.", "mrs", "miss", "mr.", "mr", "ms.", "ms",
-)
+/**
+ * Titles a Thai slip puts in front of a person's name, longest first, each
+ * with the one it is compared as: the same person is นางสาว at one bank and
+ * น.ส. at the next.
+ */
+private val TITLES: List<Pair<Regex, String>> = listOf(
+    "เด็กหญิง" to "ด.ญ.", "เด็กชาย" to "ด.ช.", "นางสาว" to "น.ส.", "น.ส." to "น.ส.", "นาง" to "นาง",
+    "นาย" to "นาย", "ด.ช." to "ด.ช.", "ด.ญ." to "ด.ญ.",
+    "mrs." to "mrs", "mrs" to "mrs", "miss" to "miss", "mr." to "mr", "mr" to "mr", "ms." to "ms", "ms" to "ms",
+).map { (written, same) -> titlePattern(bare(written)) to same }
+
+/**
+ * A title as it may come back: its dots kept, dropped or followed by a space —
+ * `น.ส.`, `น.ส`, `น. ส.` — at the very start of the line.
+ */
+private fun titlePattern(title: String): Regex {
+    val sb = StringBuilder("^")
+    for (c in title) {
+        if (c == '.') sb.append("""\.?\s?""") else sb.append(Regex.escape(c.toString()))
+    }
+    return Regex(sb.toString())
+}
 
 /** Words a slip may print on the same line before a name. */
-private val SIDES = listOf("จาก", "ไปยัง", "ถึง", "ผู้โอน", "ผู้รับ", "from", "to")
+private val SIDES = listOf("จาก", "ไปยัง", "ถึง", "ผู้โอน", "ผู้รับ", "from", "to").map { bare(it) }
 
 private class Person(val joined: String, val words: Int)
 
+/**
+ * A line the way two names on one slip are compared: lower case, no Thai marks
+ * over or under the letters, and ฮ read as อ.
+ *
+ * Both names are read off the same picture in the same font, and still not the
+ * same way twice. On a real Krungthai slip the payer's น.ส. came back as `น.ุส.`
+ * — a vowel the slip never printed — and the line stopped being a name at all.
+ * Marks are what the recogniser adds and drops; the letters are what it gets
+ * right.
+ */
+private fun bare(s: String): String {
+    val sb = StringBuilder(s.length)
+    for (c in s.lowercase()) {
+        if (thaiMark(c)) continue
+        sb.append(if (c == '\u0E2E') '\u0E2D' else c)
+    }
+    return sb.toString()
+}
+
 /** The person a line names, or null when it does not start with a title. */
 private fun personOn(line: String): Person? {
-    var t = line.trim().lowercase()
+    var t = bare(line.trim())
     for (s in SIDES) {
         if (t.startsWith("$s ") || t.startsWith("$s:")) {
             t = t.substring(s.length).trimStart(' ', ':')
             break
         }
     }
-    val title = TITLES.firstOrNull { t.startsWith(it) } ?: return null
-    val rest = t.substring(title.length)
+    var title: String? = null
+    var written = ""
+    for ((pattern, same) in TITLES) {
+        val m = pattern.find(t) ?: continue
+        title = same
+        written = m.value
+        break
+    }
+    if (title == null) return null
+    val rest = t.substring(written.length)
     // A title glued to a word that carries on is not a title: นายหน้า, mrt.
     val first = rest.firstOrNull() ?: return null
-    if (title.last() != '.' && first != ' ' && title.last() in 'a'..'z') return null
+    if (title.last() in 'a'..'z' && !written.endsWith('.') && !written.endsWith(' ') && first.isLetter()) return null
     val words = rest.replace('*', ' ').trim().trimEnd('.').split(' ').filter { it.isNotEmpty() }
     if (words.isEmpty()) return null
     return Person(title + words.joinToString(""), words.size)

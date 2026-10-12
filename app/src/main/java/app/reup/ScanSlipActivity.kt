@@ -237,9 +237,10 @@ class ScanSlipActivity : Activity() {
                 when (result) {
                     is SlipRead.Ok -> {
                         rawBox.text = result.text
-                        val read = readSlip(result.text, SlipOcr.hints(this@ScanSlipActivity))
+                        val read = result.reading(SlipOcr.hints(this@ScanSlipActivity))
                         reading = read
-                        readingBox.text = describe(read) + "\n\n" +
+                        readingBox.text = describe(read) + "\n" +
+                            "memo line ${result.memoLine ?: "—"}\n\n" +
                             "image     ${result.width}×${result.height} · ${result.languages} · cut ${result.threshold}"
                     }
                     // The three below are why this returns a result and not a
@@ -314,4 +315,4 @@ class ScanSlipActivity : Activity() {
         private const val RAW = "raw text"
         private const val READ = "what the rules made of it"
     }
-}
+}

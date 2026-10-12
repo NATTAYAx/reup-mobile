@@ -182,6 +182,15 @@ first word is a category — `อาหาร ข้าวมันไก่`, `
 category. A transfer between the payer's own accounts is recognised and never
 offered as spending. The rules for all of it are in `SlipInbox.kt`, with tests.
 
+The memo is the one line on a slip no rule can check, so it is read twice: once
+with the page, and once cut out on its own with a threshold of its own
+(`SlipOcr.memoAgain`, `betterMemo` in `SlipText.kt`). On a real Krungthai slip
+the page read ทดสอบ101 as เทดสอบ101 and the line on its own read it right. It is
+still a recogniser reading a loopless Thai font: on 400 test slips made from a
+real Krungthai and a real K PLUS slip, about three memos in four come back
+exactly as typed, and most of the rest are a letter or a mark out. The note can
+always be fixed on the form before saving.
+
 It is the one thing in the app that wakes up by itself, and it is shaped to cost
 next to nothing: off until switched on, woken by the system only when a picture
 is added, and the recogniser runs only for a new picture inside a chosen album.
@@ -245,4 +254,4 @@ licences, whose texts are in `third_party/`:
 - IBM Plex Sans Thai and IBM Plex Mono, in `app/src/main/res/font`, under the
   SIL Open Font License 1.1
 - icons from Lucide, redrawn as vector drawables in `app/src/main/res/drawable`
-  (the `ic_` files other than `ic_ring`, `ic_done` and `ic_notify`), under ISC
+  (the `ic_` files other than `ic_ring`, `ic_done` and `ic_notify`), under ISC

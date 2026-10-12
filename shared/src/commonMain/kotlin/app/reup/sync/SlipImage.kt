@@ -30,11 +30,19 @@
 // are mostly dark for longer than a line of text is tall are flipped, so their
 // writing comes out black on white like everything else.
 //
+// ─── AND ONE LINE AGAIN ──────────────────────────────────────────────────────
+//
+// The memo is the one line no rule can check, so it alone is read a second
+// time: cut out of the grey picture and given a threshold of its own by
+// [binarizeLine]. SlipText's betterMemo decides between the two readings.
+//
 // ─── AND WHAT IT DOES NOT DO ─────────────────────────────────────────────────
 //
 // Enlarge. That was tried once, on a picture that had already been shrunk on
 // the way in, and it made the reading worse. The size decision is made once,
-// in [slipSampleSize], where the picture is decoded.
+// in [slipSampleSize], where the picture is decoded. Enlarging the memo's
+// line two and three times over was tried for the second reading as well; it
+// fixed nothing the plain cut did not, and broke ทดสอบ into ทดสขบปบ.
 
 package app.reup.sync
 
@@ -113,6 +121,39 @@ fun binarizeForOcr(luma: ByteArray, width: Int, height: Int): Int {
 
 private const val INK: Byte = 0
 private const val PAPER: Byte = -1
+
+/**
+ * One line cut out of a slip, as black writing on white by a threshold of its
+ * own, in place. Returns the threshold.
+ *
+ * For reading the memo a second time; [betterMemo] says why. The page's
+ * threshold is the one that best splits the whole slip — a headline, a QR
+ * code, grey small print and the bank's colours all at once — and on the
+ * Krungthai slip it came out 148 where the memo's own line splits best at 133.
+ * Fifteen grey levels was the difference between ทดสอบ and เทดสอบ.
+ *
+ * Not Sauvola, which [binarizeForOcr] tells against: that adapts to every
+ * neighbourhood, embossing included. This is the same Otsu, on a strip one
+ * line tall, whose histogram is that line's paper and that line's ink.
+ *
+ * Light writing on a dark band comes out black on white too: when most of the
+ * strip is dark, the dark is the paper.
+ */
+fun binarizeLine(luma: ByteArray, width: Int, height: Int): Int {
+    require(width > 0 && height > 0 && luma.size >= width * height) { "no picture" }
+    val n = width * height
+    val histogram = IntArray(256)
+    for (i in 0 until n) histogram[luma[i].toInt() and 0xFF]++
+    val t = otsuThreshold(histogram)
+    var dark = 0
+    for (v in 0..t) dark += histogram[v]
+    val inverted = dark * 2 > n
+    for (i in 0 until n) {
+        val isDark = (luma[i].toInt() and 0xFF) <= t
+        luma[i] = if (isDark != inverted) INK else PAPER
+    }
+    return t
+}
 
 /**
  * Which rows belong to a dark band rather than to a light page.

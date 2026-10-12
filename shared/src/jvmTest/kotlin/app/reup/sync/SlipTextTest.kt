@@ -1251,6 +1251,16 @@ class SlipTextTest {
     }
 
     @Test
+    fun `a memo with a label's word in it is still the whole memo`() {
+        // บัตร is a card label and โทร a phone one. Beside a memo label they
+        // used to be joined to it, and the memo was cut after them.
+        assertEquals("จ่ายบัตร", readSlip("จำนวน: 50.00 บาท\nบันทึกช่วยจำ: จ่ายบัตร").memo)
+        assertEquals("ค่าโทรศัพท์", readSlip("จำนวน: 50.00 บาท\nบันทึกช่วยจำ: ค่าโทรศัพท์").memo)
+        assertEquals("ค่าบัตรคอนเสิร์ต 2 ใบ", readSlip("จำนวน: 50.00 บาท\nบันทึกช่วยจำ: ค่าบัตรคอนเสิร์ต 2 ใบ").memo)
+        assertEquals(50.0, readSlip("จำนวน: 50.00 บาท\nบันทึกช่วยจำ: เติมเงินเบอร์ 0812345678").amount)
+    }
+
+    @Test
     fun `a heading the bank printed is not a memo`() {
         // K PLUS prints รายละเอียด with the wallet owner's name after it, and
         // LINE's card says ดูรายละเอียดที่ K PLUS. Nobody typed either.
@@ -1265,6 +1275,91 @@ class SlipTextTest {
         assertEquals("Bd51b156c29d65f1e", r.reference)
         assertEquals("จ่ายค่าน้ำ", r.memo, "the whole label, not บันทึก and the rest of the word")
         assertEquals(1.0, r.amount)
+    }
+
+    @Test
+    fun `a Krungthai reference in more letters than digits is read beside its label`() {
+        // As the recogniser read a real one, made up in the same shape: both of
+        // อ้างอิง's อ as ฮ, and the reference's 5s and 0 as letters, which left
+        // four digits in seventeen.
+        val r = readSlip("รหัสฮ้างฮิง BdhxOcT9e2ffa7cb1\nจำนวนเงิน\n1.00 บาท")
+        assertEquals("BdhxOcT9e2ffa7cb1", r.reference)
+        assertTrue("no-reference" !in r.problems, "problems were " + r.problems)
+        // Under the label, where other things are printed, digits must still be
+        // most of it.
+        assertEquals(null, readSlip("รหัสอ้างอิง\nBdhxOcT9e2ffa7cb1\nจำนวนเงิน\n1.00 บาท").reference)
+        assertEquals(null, readSlip("รหัสอ้างอิง Transferfromsavings").reference, "no digits at all")
+    }
+
+    // ─── Thai marks, as the recogniser hands them back ───────────────────────
+
+    /** A string from code points, for marks in an order nobody would type. */
+    private fun cp(vararg c: Int): String = c.joinToString("") { it.toChar().toString() }
+
+    @Test
+    fun `Thai marks come back in one order, once each`() {
+        // น้ำ as น ้ ํ ้ า and as น ํ ้ า, both read off real fonts.
+        val twice = cp(0x0E19, 0x0E49, 0x0E4D, 0x0E49, 0x0E32)
+        val before = cp(0x0E19, 0x0E4D, 0x0E49, 0x0E32)
+        val right = cp(0x0E19, 0x0E49, 0x0E33)
+        assertEquals(right, thaiMarks(twice))
+        assertEquals(right, thaiMarks(before))
+        assertEquals(cp(0x0E17, 0x0E33), thaiMarks(cp(0x0E17, 0x0E4D, 0x0E32)), "ทํา is ทำ")
+        // The tone typed ahead of the vowel: ป ้ ิ ง is ปิ้ง.
+        assertEquals(cp(0x0E1B, 0x0E34, 0x0E49, 0x0E07), thaiMarks(cp(0x0E1B, 0x0E49, 0x0E34, 0x0E07)))
+        assertEquals("ทดสอบ101 Shopee", thaiMarks("ทดสอบ101 Shopee"), "nothing to do")
+        assertEquals("ค่า" + right + "ค่าไฟ", readSlip("จำนวนเงิน 50.00 บาท\nบันทึกช่วยจำ: ค่า" + twice + "ค่าไฟ").memo)
+    }
+
+    // ─── the memo, read a second time ────────────────────────────────────────
+
+    @Test
+    fun `the memo's words are found on the line the recogniser split them into`() {
+        assertEquals(0, memoStart(listOf("เท", "ด", "ส", "อ", "บ", "101"), "เทดสอบ101"), "Krungthai: the whole line")
+        assertEquals(1, memoStart(listOf("บันทึกช่วยจำ:", "อาหาร", "ทดสอบ"), "อาหารทดสอบ"), "K PLUS: after the label")
+        assertEquals(1, memoStart(listOf("บันทึกช่วยจำ", ":อาหาร"), "อาหาร"), "the colon glued to the memo")
+        assertEquals(2, memoStart(listOf("บันทึกช่วยจำ", ":", "อาหาร"), "อาหาร"), "a colon of its own is left out")
+        assertEquals(-1, memoStart(listOf("จำนวนเงิน"), "อาหาร"))
+        assertEquals(-1, memoStart(emptyList(), "อาหาร"))
+    }
+
+    @Test
+    fun `the memo's line is cut a line's height wide, but not into a word before it`() {
+        val memo = listOf(intArrayOf(300, 100, 360, 130), intArrayOf(362, 102, 400, 128))
+        assertEquals(listOf(270, 91, 430, 139), memoCut(memo, null, null, 1000, 1000).toList(), "the line to itself")
+        assertEquals(272, memoCut(memo, intArrayOf(272, 100, 287, 130), ":", 1000, 1000)[0], "a colon in front is let in whole")
+        assertEquals(290, memoCut(memo, intArrayOf(250, 100, 290, 130), "จำ", 1000, 1000)[0], "a word in front is not")
+        assertEquals(0, memoCut(listOf(intArrayOf(10, 100, 60, 130)), null, null, 1000, 1000)[0], "not past the edge")
+    }
+
+    @Test
+    fun `a line read on its own may still have the label on it`() {
+        assertEquals("อาหารทดสอบ", memoOnLine("บันทึกช่วยจำ: อาหารทดสอบ"))
+        assertEquals("อาหารทดสอบ", memoOnLine(": อาหารทดสอบ"))
+        // จำ: at the edge of the cut, as K PLUS's came back.
+        assertEquals("ค่าข้าว", memoOnLine("]: ค่าข้าว"))
+        assertEquals("ซื้อของ", memoOnLine("1: ซื้อของ"))
+        assertEquals("ค่าข้าว 3 มื้อ: 150", memoOnLine("ค่าข้าว 3 มื้อ: 150"), "a colon further in is the memo's own")
+        assertEquals("ทดสอบ101", memoOnLine("ทดสอบ101\n"))
+        assertEquals(null, memoOnLine("บันทึกช่วยจำ:"))
+    }
+
+    @Test
+    fun `the memo's line read again wins unless it is clearly the worse reading`() {
+        // The real Krungthai slip: the page saw เทดสอบ101, the line on its own ทดสอบ101.
+        assertEquals("ทดสอบ101", betterMemo(MemoRead("เทดสอบ101", 89.1f), MemoRead("ทดสอบ101", 92.0f)))
+        // Nothing read again, or nothing in it: the page's.
+        assertEquals("เทดสอบ101", betterMemo(MemoRead("เทดสอบ101", 89.1f), null))
+        assertEquals("เทดสอบ101", betterMemo(MemoRead("เทดสอบ101", 89.1f), MemoRead("", 0f)))
+        // The label caught in the cut is taken off again.
+        assertEquals("อาหารทดสอบ", betterMemo(MemoRead("อาหารกดสอบ", 92.8f), MemoRead("บันทึกช่วยจำ: อาหารทดสอบ", 87.8f)))
+        // A third longer or shorter: something else got into the cut.
+        assertEquals("ค่าข้าว", betterMemo(MemoRead("ค่าข้าว", 90f), MemoRead("ค่าข้าว 0.00 บาท ค่าธรรมเนียม", 95f)))
+        // The page much surer of its own.
+        assertEquals("กาแฟ", betterMemo(MemoRead("กาแฟ", 93.8f), MemoRead("ภาาแฟ", 80.9f)))
+        // Two readings that differ only in the order of their marks are one.
+        val twice = cp(0x0E19, 0x0E49, 0x0E4D, 0x0E49, 0x0E32)
+        assertEquals("ค่า" + cp(0x0E19, 0x0E49, 0x0E33), betterMemo(MemoRead("ค่า$twice", 85f), MemoRead("ค่าน้ำ", 90f)))
     }
 
     // ─── the time of day ─────────────────────────────────────────────────────

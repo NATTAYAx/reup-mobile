@@ -101,6 +101,48 @@ class SlipInboxTest {
         "ข่ายเงินทดสอบ",
     ).joinToString("\n")
 
+    /**
+     * Krungthai NEXT at 23:46 the same night, the first slip to arrive on its
+     * own on the phone. The recogniser put a vowel into the payer's title that
+     * the slip never printed — น.ุส. — read both of อ้างอิง's อ as ฮ, and the
+     * memo's ท as เท: ทดสอบ101 came back เทดสอบ101. The reference is made up
+     * in the shape the recogniser gave the real one, letters where 5s and 0s were.
+     */
+    private val krungthaiSelf = listOf(
+        "“น",
+        "ว",
+        "~",
+        "4",
+        "=",
+        "ye\"",
+        "OF",
+        "โอนเงินสําเรือ",
+        "at",
+        "รหัสฮ้างฮิง BdhxOcT9e2ffa7cb1",
+        "fan",
+        "lr",
+        "or",
+        "จาก",
+        "©",
+        "* kK Ok",
+        "น.ุส. สมศรี ใ",
+        "กรุงไทย",
+        "XXX-X-XX1O2-3",
+        "ไปยัง",
+        "ฯ",
+        "น.ส. สมศรี ใจงาม",
+        "พร้อมเพย์",
+        "XXX-XXXXXXXXK-0007",
+        "จํานวนเงิน",
+        "1.00 บาท",
+        "ค่าธรรมเนียม",
+        "0.00 บาท",
+        "วันที่ทํารายการ",
+        "11 ต.ค. 2569 - 23:46",
+        "บันทึกชวยจํา",
+        "เทดสอบ101",
+    ).joinToString("\n")
+
     // ── hand-made ────────────────────────────────────────────────────────────
 
     /** Somebody else, everything readable. The case one press is for. */
@@ -168,6 +210,14 @@ class SlipInboxTest {
         assertEquals(MemoSplit("bills", "ไฟ"), memoCategory("ค่าบิล ไฟ", categories))
     }
 
+    @Test
+    fun `a category name misread the way loopless letters are is still the category`() {
+        assertEquals(MemoSplit("food", "ข้าวมันไก่"), memoCategory("ฮาหาร ข้าวมันไก่", categories), "อ read as ฮ")
+        assertEquals(MemoSplit("bills", "ไฟ"), memoCategory("คาบิล ไฟ", categories), "the tone lost")
+        assertEquals(MemoSplit("food", "ทดสอบ"), memoCategory("ฮาหารทดสอบ", categories), "no space, as typed")
+        assertEquals(MemoSplit(null, "ฮาร์ดดิสก์"), memoCategory("ฮาร์ดดิสก์", categories), "a word that only starts the same")
+    }
+
     // ── who it went to ───────────────────────────────────────────────────────
 
     @Test
@@ -180,6 +230,17 @@ class SlipInboxTest {
         // A first name on its own is shared by half the country.
         assertFalse(paidToSelf("น.ส. สมศรี\nน.ส. สมศรี ใจงาม"))
         assertFalse(paidToSelf("น.ส. สมศรี ใ"), "one person on the page")
+    }
+
+    @Test
+    fun `what the recogniser adds to a name or takes from it does not hide who was paid`() {
+        assertTrue(paidToSelf(krungthaiSelf), "น.ุส. is still น.ส.")
+        assertTrue(paidToSelf("น.ส. สมศรี ใ\nนางสาว สมศรี ใจงาม"), "one bank's น.ส. is another's นางสาว")
+        assertTrue(paidToSelf("น.ส สมศรี ใ\nน.ส. สมศรี ใจงาม"), "a dot lost")
+        assertTrue(paidToSelf("น.ส. สมศร ใ\nน.ส. สมศรี ใจงาม"), "a vowel lost from the name")
+        assertFalse(paidToSelf("น.ส. สมศรี ใ\nน.ส. สมศรี ดีมาก"), "the same first name, somebody else")
+        assertFalse(paidToSelf("น.ส. สมศรี ใ\nนาย สมศรี ใจงาม"), "the title is part of who it is")
+        assertFalse(paidToSelf("Mr. John S\nMrt station John Smith"), "mrt is not mr")
     }
 
     // ── the two real slips ───────────────────────────────────────────────────
@@ -220,6 +281,23 @@ class SlipInboxTest {
         assertEquals("ข่ายเงินทดสอบ", d.note)
         assertTrue(d.toSelf)
         assertFalse(d.oneTap)
+    }
+
+    @Test
+    fun `the real Krungthai slip that arrived on its own`() {
+        val r = readSlip(krungthaiSelf, SlipHints(homeCurrency = "THB"))
+        assertEquals(1.0, r.amount)
+        assertEquals("2026-10-11", r.date, "ต.ค. read right this time")
+        assertEquals("BdhxOcT9e2ffa7cb1", r.reference, "beside รหัสฮ้างฮิง")
+        // The page's reading, pinned. The phone reads this line a second time
+        // on its own and keeps ทดสอบ101; SlipTextTest has that half.
+        assertEquals("เทดสอบ101", r.memo)
+
+        val d = draft(krungthaiSelf, at(23, 46))
+        assertEquals("2026-10-11", d.date)
+        assertTrue(d.toSelf, "the phone offered one press here, which was the bug")
+        assertFalse(d.oneTap)
+        assertEquals("โอนเข้าบัญชีตัวเอง · ฿1", slipFace(d, "อื่นๆ", today).title)
     }
 
     // ── one press ────────────────────────────────────────────────────────────
