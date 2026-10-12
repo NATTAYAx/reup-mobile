@@ -32,7 +32,8 @@
 
       NOT declared: FOREGROUND_SERVICE. Nothing runs in the background at all.
       The app is asleep between the moment it is closed and the moment the OS
-      wakes it.
+      wakes it — for an alarm, or, when slips are switched on, for a picture a
+      bank's app has just saved (SlipWatch.kt).
     -->
     <!--
       INTERNET is install-time and was not here until sync existed, which is
@@ -46,6 +47,27 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!--
+      The gallery, for slips that arrive on their own. Asked for only when that
+      is switched on in Settings, and only the albums picked there are read.
+
+      READ_MEDIA_IMAGES is the whole gallery from Android 13; before that the
+      same thing was READ_EXTERNAL_STORAGE, which is capped at 32 so a newer
+      phone is never asked for the old, wider one.
+
+      READ_MEDIA_VISUAL_USER_SELECTED is declared so that "selected photos
+      only" on Android 14 is a state the app can see and explain. Without it
+      the system hands out a temporary grant instead, which looks like full
+      access until the app is closed and then quietly is not. A slip saved
+      tomorrow is never among the photos picked today, so that state is the
+      one the settings screen has to be able to name.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
     <!--
       usesCleartextTraffic, and the trade it represents.
@@ -192,6 +214,23 @@
         <receiver
             android:name=".DoneReceiver"
             android:exported="false" />
+
+        <!-- The save and don't-save buttons on a slip. Not exported, for the
+             same reason as the one above. -->
+        <receiver
+            android:name=".SlipReceiver"
+            android:exported="false" />
+
+        <!--
+          What the system wakes when a picture is added, while slips are
+          switched on. Exported because the one that binds it is the system,
+          like BootReceiver's sender; BIND_JOB_SERVICE is a permission only the
+          system holds, so nothing else can start it.
+        -->
+        <service
+            android:name=".SlipWatchJob"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!--
           Exported, because the sender is the system rather than this app. All

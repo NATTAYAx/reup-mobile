@@ -167,6 +167,33 @@ class HorizonTest {
     }
 
     @Test
+    fun `a list gets every task's next ring, however many there are`() {
+        // Twelve dailies, an hour apart. The system's queue holds eight rings,
+        // which is eight tasks; a screen drawn from it would call the other
+        // four unscheduled when every one of them rings within the day.
+        val twelve = (0 until 12).map { h ->
+            val hh = (h + 11).toString().padStart(2, '0')
+            ScheduledTask("t$hh", ResetSpec(ResetType.DAILY, resetTime = "$hh:00"))
+        }
+        assertEquals(8, horizon(twelve, now, bkk, limit = 8).map { it.taskId }.toSet().size)
+
+        val each = nextPerTask(twelve, now, bkk)
+        assertEquals(twelve.map { it.id }.toSet(), each.map { it.taskId }.toSet())
+        assertEquals(12, each.size)
+        assertEquals(each.map { it.fireAt }.sorted(), each.map { it.fireAt })
+        // And the first of them is the first of the queue.
+        assertEquals(horizon(twelve, now, bkk, limit = 1).first(), each.first())
+    }
+
+    @Test
+    fun `the list's rings keep the queue's quiet hours`() {
+        val q = QuietHours("23:00", "08:00")
+        val each = nextPerTask(listOf(daily04), now, bkk, q)
+        assertEquals(horizon(listOf(daily04), now, bkk, 1, q), each)
+        assertTrue(each.single().silent)
+    }
+
+    @Test
     fun `a frequent task cannot crowd out a rare one`() {
         val rare = ScheduledTask(
             "rare",

@@ -63,6 +63,12 @@ data class Palette(
 
     val text: Int,
     val dim: Int,
+    /**
+     * The quietest text there is - a ticked row's second line, a time that has
+     * already been dealt with. Still text, so it is held to the same 4.5 as
+     * [dim] on both surfaces; it was a mark-only colour at 3.7 until the
+     * redesign started writing words in it.
+     */
     val faint: Int,
 
     /**
@@ -102,7 +108,7 @@ val THEMES: List<Palette> = listOf(
         bg = hex("#030712"), card = hex("#111827"), raised = hex("#161F2E"),
         field = hex("#0A101C"), line = hex("#1F2937"),
         primary = hex("#7C3AED"), accent = hex("#A78BFA"),
-        text = hex("#E8E8EA"), dim = hex("#9CA3AF"), faint = hex("#6B7280"),
+        text = hex("#E8E8EA"), dim = hex("#9CA3AF"), faint = hex("#7F8796"),
     ),
     Palette(
         id = "ocean",
@@ -110,7 +116,7 @@ val THEMES: List<Palette> = listOf(
         bg = hex("#020814"), card = hex("#0E1A2B"), raised = hex("#132234"),
         field = hex("#07101E"), line = hex("#1E3048"),
         primary = hex("#2563EB"), accent = hex("#93C5FD"),
-        text = hex("#E6EDF5"), dim = hex("#9BB0C6"), faint = hex("#6B8199"),
+        text = hex("#E6EDF5"), dim = hex("#9BB0C6"), faint = hex("#758BA2"),
     ),
     Palette(
         id = "forest",
@@ -118,7 +124,7 @@ val THEMES: List<Palette> = listOf(
         bg = hex("#03100C"), card = hex("#0E2018"), raised = hex("#132A20"),
         field = hex("#071711"), line = hex("#1E3A2C"),
         primary = hex("#0F9D6E"), accent = hex("#6EE7B7"),
-        text = hex("#E6F0EA"), dim = hex("#9CB8AA"), faint = hex("#6C8A7B"),
+        text = hex("#E6F0EA"), dim = hex("#9CB8AA"), faint = hex("#769485"),
         onPrimary = hex("#000000"),
         // The one theme where the ordinary green would disappear into the
         // furniture. Money coming in has to stay findable, so it moves.
@@ -130,7 +136,7 @@ val THEMES: List<Palette> = listOf(
         bg = hex("#100A06"), card = hex("#221610"), raised = hex("#2B1D15"),
         field = hex("#170F0A"), line = hex("#3A281D"),
         primary = hex("#EA6E1F"), accent = hex("#FDBA74"),
-        text = hex("#F2E9E2"), dim = hex("#C0A996"), faint = hex("#8E7666"),
+        text = hex("#F2E9E2"), dim = hex("#C0A996"), faint = hex("#9B8372"),
         onPrimary = hex("#000000"),
         // Amber next to orange says nothing at all.
         warn = hex("#FDE047"),
@@ -141,7 +147,7 @@ val THEMES: List<Palette> = listOf(
         bg = hex("#12060A"), card = hex("#241119"), raised = hex("#2D1720"),
         field = hex("#190A10"), line = hex("#3B1F2B"),
         primary = hex("#D83F63"), accent = hex("#FDA4AF"),
-        text = hex("#F4E8EC"), dim = hex("#C6A3AF"), faint = hex("#94707D"),
+        text = hex("#F4E8EC"), dim = hex("#C6A3AF"), faint = hex("#A07C88"),
         onPrimary = hex("#000000"),
     ),
     Palette(
@@ -153,7 +159,7 @@ val THEMES: List<Palette> = listOf(
         bg = hex("#08090B"), card = hex("#15171A"), raised = hex("#1B1E22"),
         field = hex("#0E1013"), line = hex("#282C31"),
         primary = hex("#4B5563"), accent = hex("#C3C8CF"),
-        text = hex("#E5E7EB"), dim = hex("#A1A6AD"), faint = hex("#71767D"),
+        text = hex("#E5E7EB"), dim = hex("#A1A6AD"), faint = hex("#81868D"),
     ),
 )
 

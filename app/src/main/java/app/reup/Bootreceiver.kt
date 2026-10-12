@@ -64,6 +64,10 @@ class BootReceiver : BroadcastReceiver() {
 
                 Log.i(TAG, "rescheduling after ${intent.action}")
                 Notifications.ensureChannel(context)
+                // The wake that reads new slips is thrown away by a restart
+                // too — the system will not keep one of that kind across a
+                // reboot — so it is asked for again here, when it is on.
+                SlipWatch.arm(context)
                 finishLater(TAG) { Scheduler.reschedule(context) }
             }
         }

@@ -3,6 +3,7 @@ package app.reup
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.util.Log
+import app.reup.sync.SyncBackend
 import app.reup.sync.SyncConfigs
 import app.reup.sync.driveTokenSource
 import app.reup.core.QuietHours
@@ -283,6 +284,31 @@ object Repo {
     var lastQuiet: String = "ยังไม่ได้ลองซิงก์อัตโนมัติ"
         private set
 
+    /**
+     * The same attempt as a fact rather than a sentence, for the screens that
+     * draw it - a time beside a cloud on Today, a line under the sync row in
+     * Settings. Null until the first attempt of this process.
+     *
+     * [lastQuiet] stays, word for word, because the diagnostics panel prints it
+     * and a bug report quotes it.
+     */
+    @Volatile
+    var lastSync: QuietSync? = null
+        private set
+
+    /** What the newest attempt did. Not set up is its own answer, not an error. */
+    data class QuietSync(
+        val atMillis: Long,
+        val notSetUp: Boolean,
+        /** The reason it did not go through, or null when it did. */
+        val error: String?,
+        val applied: Int,
+        val pushed: Int,
+    )
+
+    /** Which kind of storage sync is pointed at, for the line that names it. */
+    suspend fun syncBackend(ctx: Context): SyncBackend = SyncConfigs.load(database(ctx)).backend
+
     private fun stamp(): String {
         val t = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
         return "%02d:%02d:%02d".format(t.hour, t.minute, t.second)
@@ -299,9 +325,17 @@ object Repo {
             report == null -> "อัตโนมัติ ${stamp()} · ยังตั้งค่าไม่ครบ"
             else -> "อัตโนมัติ ${stamp()} · รับ ${report.applied} ส่ง ${report.pushed}"
         }
+        lastSync = QuietSync(
+            atMillis = System.currentTimeMillis(),
+            notSetUp = report == null,
+            error = null,
+            applied = report?.applied ?: 0,
+            pushed = report?.pushed ?: 0,
+        )
         report != null && (report.applied > 0 || report.pushed > 0)
     } catch (e: Exception) {
         lastQuiet = "อัตโนมัติ ${stamp()} · ${e.message ?: e.toString()}"
+        lastSync = QuietSync(System.currentTimeMillis(), false, e.message ?: e.toString(), 0, 0)
         // Swallowed on purpose, and only here. Not being set up, no signal, a
         // folder that has moved — none of them are things this caller can do
         // anything about, and all of them are things the sync screen says

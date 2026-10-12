@@ -4,10 +4,15 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.TaskStackBuilder
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Icon
 import android.net.Uri
+import app.reup.sync.slipFace
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * Posting the notification, and the two defaults that matter more than the rest
@@ -49,6 +54,22 @@ object Notifications {
      */
     const val CHANNEL_QUIET = "resets_quiet"
 
+    /**
+     * Slips that arrived on their own.
+     *
+     * HIGH, unlike the reminders, and that is not a contradiction. A reminder
+     * arrives unasked, in the middle of something else, and has no business
+     * taking over the screen. This one arrives two seconds after the person
+     * pressed transfer, while they are still looking at the bank's app, and is
+     * the answer to what they just did: popping up is the point, because the
+     * save button is on it. Silent all the same; anyone who wants a sound can
+     * turn one on in the channel's settings.
+     */
+    const val CHANNEL_SLIPS = "slips"
+
+    /** The tag slip notifications are posted under, so their numbers are their own. */
+    const val TAG_SLIP = "slip"
+
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
 
@@ -70,6 +91,19 @@ object Notifications {
         // system keeps whatever the user changed. So this can be called every
         // launch, and a person who turned sound on stays turned on.
         manager.createNotificationChannel(channel)
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_SLIPS,
+                "สลิปเข้ามาเอง",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "สลิปใหม่จากแอปธนาคาร พร้อมปุ่มบันทึก"
+                setSound(null, null)
+                enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            },
+        )
 
         manager.createNotificationChannel(
             NotificationChannel(
@@ -170,4 +204,115 @@ object Notifications {
 
         manager.notify(id, builder.build())
     }
+
+    // ─── slips ──────────────────────────────────────────────────────────────
+
+    /**
+     * One slip, with what it will be filed as and a save button when nothing
+     * on it is left to check.
+     *
+     * Tapping the body opens the form filled in from the slip, with the money
+     * tab behind it so that back goes somewhere that makes sense. The buttons
+     * are save and don't-save: the second one is as important as the first,
+     * because a slip nobody wants recorded — a transfer to oneself, a top-up —
+     * should be one press to be rid of, not something that waits in a list.
+     *
+     * Hidden on the lock screen like everything else here. An amount and what
+     * it was for are a line of somebody's finances.
+     */
+    fun postSlip(context: Context, slip: PendingSlip, label: String) {
+        // The watcher can be the first thing to run after an update, before
+        // any screen has had the chance to create this channel.
+        ensureChannel(context)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val zone = TimeZone.currentSystemDefault()
+        val today = Clock.System.now().toLocalDateTime(zone).date
+        val face = slipFace(slip.draft, label, today)
+        val text = if (slip.album.isBlank()) face.text else face.text + " · " + slip.album
+        val code = slip.notificationId
+
+        val redacted = Notification.Builder(context, CHANNEL_SLIPS)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle("มีสลิปใหม่")
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .build()
+
+        val builder = Notification.Builder(context, CHANNEL_SLIPS)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle(face.title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setContentIntent(openSlip(context, slip))
+            .setAutoCancel(true)
+            .setWhen(slip.savedAt)
+            .setShowWhen(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(redacted)
+
+        // Same reason as the task button above: the request code and the data
+        // both carry the slip, so two slips in the shade are two buttons and
+        // not one button pointed at whichever was posted last.
+        if (slip.draft.oneTap) {
+            builder.addAction(
+                Notification.Action.Builder(
+                    Icon.createWithResource(context, R.drawable.ic_check),
+                    "บันทึก",
+                    slipAction(context, slip, SlipReceiver.ACTION_SAVE),
+                ).build(),
+            )
+        }
+        builder.addAction(
+            Notification.Action.Builder(
+                Icon.createWithResource(context, R.drawable.ic_close),
+                "ไม่บันทึก",
+                slipAction(context, slip, SlipReceiver.ACTION_DISMISS),
+            ).build(),
+        )
+
+        manager.notify(TAG_SLIP, code, builder.build())
+    }
+
+    /**
+     * A save that did not go through, said where the press was made.
+     *
+     * The slip is still in the list; this only says so, and opens the form
+     * where the reason can be seen and fixed.
+     */
+    fun postSlipFailed(context: Context, slip: PendingSlip, reason: String) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val builder = Notification.Builder(context, CHANNEL_SLIPS)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle("บันทึกสลิปไม่ได้")
+            .setContentText(reason)
+            .setStyle(Notification.BigTextStyle().bigText(reason))
+            .setContentIntent(openSlip(context, slip))
+            .setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+        manager.notify(TAG_SLIP, slip.notificationId, builder.build())
+    }
+
+    fun cancelSlip(context: Context, id: Long) {
+        val code = (id xor (id ushr 32)).toInt()
+        context.getSystemService(NotificationManager::class.java).cancel(TAG_SLIP, code)
+    }
+
+    private fun openSlip(context: Context, slip: PendingSlip): PendingIntent {
+        val form = PendingSlips.editIntent(context, slip)
+            .setData(Uri.parse("reup://slip/" + slip.id + "/open"))
+        return TaskStackBuilder.create(context)
+            .addNextIntent(Intent(context, MainActivity::class.java))
+            .addNextIntent(form)
+            .getPendingIntent(slip.notificationId, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)!!
+    }
+
+    private fun slipAction(context: Context, slip: PendingSlip, action: String): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            slip.notificationId,
+            Intent(context, SlipReceiver::class.java)
+                .setAction(action)
+                .setData(Uri.parse("reup://slip/" + slip.id + "/" + action.substringAfterLast('.')))
+                .putExtra(SlipReceiver.EXTRA_ID, slip.id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 }

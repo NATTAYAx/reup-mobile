@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app's own mark, small: a ring with a gap at the top and a dot sitting in
+     the gap - the same geometry as ic_launcher_foreground, scaled to 24.
+
+     Centre 12,12, radius 8, stroke 2. The gap is 70 degrees wide, centred on
+     the top, so the ends sit 35 degrees either side of straight up:
+     12 +/- 8 sin 35 = 16.589 / 7.411, and 12 - 8 cos 35 = 5.447. The dot is at
+     12,4 - where the ring would have been - radius 1.6.
+
+     Used as the task marker on every row and on the Today tab, so the thing
+     you tick is the thing on the app icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M16.589,5.447 A8,8 0 1,1 7.411,5.447"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        />
+    <path
+        android:pathData="M10.4,4 A1.6,1.6 0 1,0 13.6,4 A1.6,1.6 0 1,0 10.4,4 Z"
+        android:fillColor="#FFFFFFFF"
+        />
+</vector>

@@ -6,6 +6,12 @@ kotlinxCoroutines = "1.10.2"
 junitPlatform = "1.11.4"
 agp = "9.3.0"
 tesseract = "4.8.0"
+# One number for every Compose library: the BOM picks versions that were
+# released together, so ui, foundation and material3 cannot drift apart.
+# 2026.09.00 is ui/foundation 1.12 and material3 1.4, which want compileSdk 37
+# and AGP 9 - both of which this build already has.
+composeBom = "2026.09.00"
+activityCompose = "1.13.0"
 
 [libraries]
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
@@ -23,11 +29,21 @@ tesseract4android = { module = "cz.adaptech.tesseract4android:tesseract4android"
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitPlatform" }
+# The screens. No versions on the four below: the BOM above decides them.
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 
 [plugins]
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 androidApplication = { id = "com.android.application", version.ref = "agp" }
+# The Compose compiler ships with Kotlin since 2.0, so it is versioned with it
+# rather than on its own - a mismatch between the two is the classic Compose
+# build failure, and this makes it impossible to write down.
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 # The KMP-specific Android plugin, versioned with AGP itself. Note it is NOT
 # com.android.library: that one relies on AGP APIs deprecated in 9.0 and due to

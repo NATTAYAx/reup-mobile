@@ -123,6 +123,34 @@ fun scheduledTaskFrom(r: DbRow): ScheduledTask? {
 fun labelFrom(r: DbRow): String = text(r, "name")?.takeIf { it.isNotBlank() } ?: "งาน"
 
 /**
+ * What a card says about a task beyond when it rings.
+ *
+ * Kept apart from [ScheduledTask] for the reason [labelFrom] always was: the
+ * engine has no business knowing what a task is called or what kind it is, and
+ * a field added here for a screen can never change when anything rings.
+ */
+data class TaskInfo(
+    val name: String,
+    /** The desktop's category key - game, school, work, personal - or null. */
+    val category: String?,
+    /** How far the tick reaches. Whether it is ticked is [isDoneNow]'s call. */
+    val completedUntil: String?,
+    /** When the tick was made, which is what "ticked today" is about. */
+    val completedAt: String?,
+)
+
+/** A row as a card needs it, keyed by uid. Null without a uid, like the others. */
+fun taskInfoFrom(r: DbRow): Pair<String, TaskInfo>? {
+    val uid = text(r, "uid") ?: return null
+    return uid to TaskInfo(
+        name = labelFrom(r),
+        category = text(r, "category")?.takeIf { it.isNotBlank() },
+        completedUntil = text(r, "completed_until")?.takeIf { it.isNotBlank() },
+        completedAt = text(r, "completed_at")?.takeIf { it.isNotBlank() },
+    )
+}
+
+/**
  * Quiet hours, read from the same row the desktop writes.
  *
  * It used to read `app_settings` under a key called `quiet_hours` — a key the
@@ -293,6 +321,15 @@ class TaskRepo(private val db: Db) {
 
     suspend fun tasks(): List<ScheduledTask> =
         db.select(ACTIVE_TASKS_SQL).mapNotNull(::scheduledTaskFrom)
+
+    /**
+     * Everything a card shows, for every task, in one read.
+     *
+     * The home screen used to make three passes over the same rows - names,
+     * ticks, and the schedule - which is two more than the rows needed.
+     */
+    suspend fun infos(): Map<String, TaskInfo> =
+        db.select(ACTIVE_TASKS_SQL).mapNotNull(::taskInfoFrom).toMap()
 
     /** id to name, for the notification. One query, not one per alarm. */
     suspend fun labels(): Map<String, String> =

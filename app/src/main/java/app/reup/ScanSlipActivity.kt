@@ -3,30 +3,26 @@ package app.reup
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import app.reup.sync.Category
 import app.reup.sync.SlipReading
+import app.reup.sync.memoCategory
 import app.reup.sync.readSlip
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The screen whose job is to stop the guessing.
  *
- * SlipText was written against field shapes taken from real slips, and tested
- * against text assembled by hand. Nobody has yet seen what a recogniser
- * actually returns for a Thai slip: the line order, what it does with the
- * two-column layouts, how badly the Thai comes out at that resolution.
- *
- * So this shows BOTH HALVES AT ONCE. The raw text on top, exactly as it came
+ * It shows BOTH HALVES AT ONCE. The raw text on top, exactly as it came
  * back, and underneath it what the rules made of it. One real slip then answers
  * two questions in one look:
  *
@@ -35,10 +31,14 @@ import kotlinx.coroutines.launch
  *     the reading is wrong     → a rule in SlipText is the problem
  *
  * A screen showing only the result cannot tell those apart, and they are fixed
- * in different files. This is the entire reason this screen exists, and it is
- * why it does not write anything to the database yet: adding a row would make
- * it a feature, and a feature invites being used before anybody has looked at
- * whether it reads slips correctly.
+ * in different files. That is how the October slips were fixed: the raw text
+ * from the colour picture was rubbish, so the picture was the problem, not the
+ * rules. Under the reading is a third line, the working — the size the picture
+ * was read at, the languages, the grey level that split ink from paper — for
+ * the next time the raw text is rubbish.
+ *
+ * It still writes nothing itself. The button hands the reading to the money
+ * screen, where a person looks at it before anything is saved.
  *
  * WHY A PICTURE FROM THE GALLERY AND NOT THE CAMERA
  * -------------------------------------------------
@@ -172,11 +172,14 @@ class ScanSlipActivity : Activity() {
      * This is the whole difference between this screen being a diagnostic and
      * being a feature, and it is the same shape the desktop uses: read, show,
      * let a person look at it, and only then write. Nothing here touches the
-     * database.
+     * database except to read the category list.
      *
-     * The note carries the reference number when there is one, so a row in the
-     * ledger can be traced back to the slip it came from months later. When
-     * there is not one it stays empty rather than inventing something.
+     * The note is the memo typed at the bank, with its first word taken off
+     * when that word names a category, which then becomes the category. The
+     * reference no longer goes in the note: it has its own column, slip_ref,
+     * where it keeps the same slip from being saved twice and stays out of the
+     * one box people actually read. A row can still be traced back to its slip
+     * from there.
      */
     private fun use() {
         val r = reading ?: return
@@ -184,12 +187,36 @@ class ScanSlipActivity : Activity() {
         val text =
             if (amount == amount.toLong().toDouble()) amount.toLong().toString()
             else amount.toString()
-        startActivity(
-            Intent(this, AddMoneyActivity::class.java)
+        scope.launch {
+            // The same two steps a slip arriving on its own goes through: the
+            // memo's first word, and failing that, where the same note went
+            // last time.
+            var split = memoCategory(r.memo, emptyList<Category>())
+            try {
+                val repo = Repo.money(this@ScanSlipActivity)
+                split = memoCategory(r.memo, repo.categories())
+                if (split.category == null && split.note.isNotEmpty()) {
+                    split = split.copy(category = repo.categoryUsedFor(split.note))
+                }
+            } catch (_: Exception) {
+                // No categories is a form that starts on its first chip, which
+                // is what it did before slips had memos.
+            }
+            val intent = Intent(this@ScanSlipActivity, AddMoneyActivity::class.java)
                 .putExtra(AddMoneyActivity.EXTRA_AMOUNT, text)
                 .putExtra(AddMoneyActivity.EXTRA_DATE, r.date ?: "")
-                .putExtra(AddMoneyActivity.EXTRA_NOTE, r.reference ?: ""),
-        )
+                .putExtra(AddMoneyActivity.EXTRA_NOTE, split.note)
+            split.category?.let { intent.putExtra(AddMoneyActivity.EXTRA_CATEGORY, it) }
+            r.reference?.let { intent.putExtra(AddMoneyActivity.EXTRA_SLIP_REF, it) }
+            // The unit goes with the number. A slip in dollars filed under the
+            // phone's own currency is a row that is wrong by a factor nobody sees,
+            // so when the slip says, the form is told; and when the slip says
+            // something several currencies share, the form is told that instead,
+            // so it can say so next to the unit rather than look certain.
+            r.currency?.let { intent.putExtra(AddMoneyActivity.EXTRA_CURRENCY, it) }
+            if ("currency-ambiguous" in r.problems) intent.putExtra(AddMoneyActivity.EXTRA_CURRENCY_UNSURE, true)
+            startActivity(intent)
+        }
     }
 
     private fun scan(uri: Uri) {
@@ -201,16 +228,19 @@ class ScanSlipActivity : Activity() {
         dress()
         scope.launch {
             try {
-                val bitmap = load(uri)
+                // Off the main thread: a full-size screenshot takes long enough
+                // to decode that doing it here froze the screen it was on.
+                val bitmap = withContext(Dispatchers.IO) { SlipOcr.decode(this@ScanSlipActivity, uri) }
                 if (bitmap == null) { status.text = NO_IMAGE; return@launch }
                 val result = SlipOcr.read(this@ScanSlipActivity, bitmap)
                 bitmap.recycle()
                 when (result) {
                     is SlipRead.Ok -> {
                         rawBox.text = result.text
-                        val read = readSlip(result.text)
+                        val read = readSlip(result.text, SlipOcr.hints(this@ScanSlipActivity))
                         reading = read
-                        readingBox.text = describe(read)
+                        readingBox.text = describe(read) + "\n\n" +
+                            "image     ${result.width}×${result.height} · ${result.languages} · cut ${result.threshold}"
                     }
                     // The three below are why this returns a result and not a
                     // string. They are fixed in three different places, and a
@@ -241,25 +271,6 @@ class ScanSlipActivity : Activity() {
     }
 
     /**
-     * The image, scaled down if it is enormous.
-     *
-     * Tesseract wants resolution and a phone screenshot already has plenty. What
-     * it does not want is a forty megapixel photograph, which is slow and, on a
-     * device with little memory left, is the one line in this file that can take
-     * the whole app down.
-     */
-    private fun load(uri: Uri): Bitmap? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_EDGE) sample *= 2
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        return contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, opts)
-        }
-    }
-
-    /**
      * The reading, spelled out field by field including the empty ones.
      *
      * A field that read as nothing is the interesting result here, so it gets a
@@ -271,6 +282,7 @@ class ScanSlipActivity : Activity() {
         appendLine("currency  ${r.currency ?: "—"}")
         appendLine("date      ${r.date ?: "—"}")
         appendLine("reference ${r.reference ?: "—"}")
+        appendLine("memo      ${r.memo ?: "—"}")
         append("problems  ${if (r.problems.isEmpty()) "none" else r.problems.joinToString(", ")}")
     }
 
@@ -278,7 +290,6 @@ class ScanSlipActivity : Activity() {
 
     companion object {
         private const val PICK_IMAGE = 4101
-        private const val MAX_EDGE = 2200
 
         private const val TITLE = "\u0e2d\u0e48\u0e32\u0e19\u0e2a\u0e25\u0e34\u0e1b"
         private const val PICK = "\u0e40\u0e25\u0e37\u0e2d\u0e01\u0e23\u0e39\u0e1b\u0e2a\u0e25\u0e34\u0e1b"
