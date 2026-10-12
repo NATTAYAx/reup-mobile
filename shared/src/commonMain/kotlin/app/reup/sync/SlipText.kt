@@ -56,6 +56,7 @@ package app.reup.sync
 
 import app.reup.core.THAI_MONTHS
 import app.reup.core.THAI_MONTHS_SHORT
+import kotlin.math.abs
 import kotlin.math.roundToLong
 
 /** What could be read off a slip. Anything unreadable is null, never a guess. */
@@ -175,7 +176,7 @@ fun readSlip(raw: String, hints: SlipHints = SlipHints()): SlipReading {
 
 /**
  * The text the rules read: one kind of digit, one kind of space, one kind of
- * dash, and สระอำ spelled one way.
+ * dash, and Thai marks in one order with สระอำ spelled one way.
  */
 private fun normalize(raw: String): String {
     val sb = StringBuilder(raw.length)
@@ -199,18 +200,61 @@ private fun normalize(raw: String): String {
             ch in '\u2010'..'\u2015' || ch == '\u2212' || ch == '\uFE63' -> sb.append('-')
             ch == '\u2018' || ch == '\u2019' || ch == '\u02BC' -> sb.append('\'')
             ch == '\u2026' -> sb.append("...")
-            // นิคหิต + สระอา is how a recogniser writes สระอำ more often than
-            // not. Both are on every Thai slip ever read here, so they are made
-            // one spelling once, at the door, instead of in every label.
-            ch == '\u0E4D' && next == '\u0E32' -> {
-                sb.append('\u0E33')
-                i++
-            }
             else -> sb.append(ch)
         }
         i++
     }
-    return repairZeros(sb.toString())
+    return repairZeros(thaiMarks(sb.toString()))
+}
+
+/**
+ * Each Thai letter's marks once, in the order a keyboard types them, and สระอำ
+ * as one letter.
+ *
+ * A recogniser hands a letter's marks back in whatever order it found them, and
+ * now and then twice. น้ำ has come back as น ้ ํ ้ า and as น ํ ้ า — neither of
+ * which is how anybody types it, and both of which end up in the note. So in
+ * each run of marks a repeat is dropped and the rest are put in typing order:
+ * the vowel above or below, then the tone, then the rest. A นิคหิต at the end
+ * of a run with สระอา after it is the สระอำ it was split from — which is how a
+ * recogniser writes สระอำ more often than not, on every Thai slip read here.
+ *
+ * Only marks move. The letters, and how many of them there are, stay exactly
+ * as they were read.
+ */
+internal fun thaiMarks(text: String): String {
+    if (text.none { thaiMark(it) }) return text
+    val sb = StringBuilder(text.length)
+    var i = 0
+    while (i < text.length) {
+        if (!thaiMark(text[i])) {
+            sb.append(text[i])
+            i++
+            continue
+        }
+        var end = i
+        while (end < text.length && thaiMark(text[end])) end++
+        val run = text.substring(i, end).toList().distinct().sortedBy { markRank(it) }
+        val am = run.last() == '\u0E4D' && text.getOrNull(end) == '\u0E32'
+        for (m in run) if (!(am && m == '\u0E4D')) sb.append(m)
+        if (am) {
+            sb.append('\u0E33')
+            end++
+        }
+        i = end
+    }
+    return sb.toString()
+}
+
+/** A Thai vowel or tone mark, written over or under the letter before it. */
+internal fun thaiMark(c: Char): Boolean = c == '\u0E31' || c in '\u0E34'..'\u0E3A' || c in '\u0E47'..'\u0E4E'
+
+/** Typing order: the vowel above or below, the tone, การันต์, นิคหิต. */
+private fun markRank(c: Char): Int = when (c) {
+    '\u0E31', in '\u0E34'..'\u0E3A', '\u0E47' -> 0
+    in '\u0E48'..'\u0E4B' -> 1
+    '\u0E4C', '\u0E4E' -> 2
+    else -> 3
 }
 
 /**
@@ -243,7 +287,7 @@ private fun repairZeros(text: String): String =
 
 /**
  * A line in lower case with Latin accents taken off: Số tiền → so tien,
- * Gebühr → gebuhr, Référence → reference.
+ * Gebühr → gebuhr, Référence → reference. And ฮ read as อ — see [FOLD].
  *
  * One character in, one character out, always — the labels found in this copy
  * are matched back against numbers found in the original by position.
@@ -287,6 +331,10 @@ private val FOLD: Map<Char, Char> = buildMap {
     )) {
         for (c in group.drop(1)) put(c, group[0])
     }
+    // Krungthai NEXT's loopless อ comes back as ฮ often enough that a label
+    // read for ฮ instead of อ is still the label: รหัสฮ้างฮิง is รหัสอ้างอิง. No
+    // label anywhere in this file is spelt with ฮ, so nothing is lost by it.
+    put('\u0E2E', '\u0E2D')
 }
 
 /** A Latin letter, accented or not — the kind that makes a word longer. */
@@ -1056,12 +1104,12 @@ private val MEMO = listOf(
     "备注", "附言", "留言", "備註", "メモ", "摘要", "메모", "비고",
 )
 
-// The ฮ้างอิง spellings are the same font again: Krungthai NEXT's loopless อ
-// comes back as ฮ, and its reference — Ac40a…, letters and digits — sat under a
-// label nothing matched.
+// Krungthai NEXT's loopless อ comes back as ฮ — รหัสฮ้างอิง, รหัสฮ้างฮิง — and
+// its reference, Ac1f9… in letters and digits, sat under a label nothing
+// matched. The ฮ spellings are no longer listed: fold() reads ฮ as อ before
+// any label is looked for.
 private val REFERENCE = listOf(
     "เลขที่รายการ", "รหัสอ้างอิง", "เลขที่อ้างอิง", "เลขอ้างอิง", "หมายเลขอ้างอิง", "รหัสรายการ",
-    "รหัสฮ้างอิง", "เลขที่ฮ้างอิง", "เลขฮ้างอิง", "หมายเลขฮ้างอิง",
     "หมายเลขรายการ", "รหัสธุรกรรม", "เลขที่ธุรกรรม", "เลขที่ใบเสร็จ",
     "reference number", "reference no", "reference", "ref. no", "ref no", "ref id", "ref",
     "transaction id", "transaction no", "transaction number", "transaction ref", "txn id",
@@ -1227,9 +1275,15 @@ private fun findLabels(folded: String): Labels {
     // ค่าธรรมเนียมการชำระ. Joined when nothing but a short run of letters or
     // punctuation separates them — never across a number, and never across the
     // wide gap that means two columns.
+    //
+    // And never onto a memo label. What follows one is somebody's words, and
+    // somebody's words are full of labels: บันทึกช่วยจำ: จ่ายบัตร has บัตร in it,
+    // ค่าโทรศัพท์ has โทร. Joined, the memo label swallowed them and the memo
+    // came back as ศัพท์, or as nothing at all.
     val merged = mutableListOf<LabelHit>()
     for (h in kept) {
         val prev = merged.lastOrNull()
+        if (prev != null && prev.kind == Kind.MEMO) break
         if (prev != null && joins(text, prev.end, h.start)) {
             merged[merged.size - 1] = LabelHit(prev.start, h.end, stronger(prev.kind, h.kind))
         } else {
@@ -1920,7 +1974,7 @@ private fun readReference(page: Page, problems: MutableList<String>): String? {
             if (label.kind != Kind.REFERENCE) continue
             val rest = line.text.substring(label.end)
             if (BILL_REF.containsMatchIn(rest)) continue
-            when (val own = referenceIn(rest, sameLine = true, next = page.lines.getOrNull(i + 1))) {
+            when (val own = referenceIn(rest, sameLine = true, next = page.lines.getOrNull(i + 1), beside = true)) {
                 is Ref.Found -> return own.value
                 Ref.Cut -> {
                     cut = true
@@ -1959,7 +2013,8 @@ private val CHUNK = Regex("""[A-Za-z0-9][A-Za-z0-9\-]*""")
  * Twelve characters at least, mostly digits. Twelve because India's UPI
  * reference is twelve digits; not fewer, because on one slip the recogniser
  * split a twenty-character K PLUS reference in two and an eleven-character
- * half came back looking exactly as trustworthy as a whole one.
+ * half came back looking exactly as trustworthy as a whole one. Right
+ * [beside] the label, letters may outnumber the digits — see [lettered].
  *
  * Digit groups one space apart are joined right beside the label or on the
  * first line under it — GCash prints `Ref No. 9012 345 678901` on purpose —
@@ -1969,7 +2024,7 @@ private val CHUNK = Regex("""[A-Za-z0-9][A-Za-z0-9\-]*""")
  * letters in them are a reference the recogniser broke, and half of it is not
  * a shorter reference, it is a different one.
  */
-private fun referenceIn(text: String, sameLine: Boolean, next: Line?): Ref {
+private fun referenceIn(text: String, sameLine: Boolean, next: Line?, beside: Boolean = false): Ref {
     val chunks = CHUNK.findAll(text).toList()
     var best: String? = null
     var cut = false
@@ -2011,7 +2066,7 @@ private fun referenceIn(text: String, sameLine: Boolean, next: Line?): Ref {
                     phoneLike(c) -> other = true
                 uuidShape(c) == UuidShape.WHOLE -> best = longer(best, c.replace('O', '0').replace('o', '0'))
                 uuidShape(c) == UuidShape.CUT -> cut = true
-                looksLikeReference(c) -> when {
+                looksLikeReference(c) || (beside && lettered(c)) -> when {
                     shortened -> cut = true
                     after.isBlank() && wraps(next) -> other = true
                     else -> best = longer(best, c)
@@ -2034,6 +2089,22 @@ private fun longer(a: String?, b: String): String = if (a == null || b.length > 
 private fun looksLikeReference(c: String): Boolean {
     val body = c.filter { it != '-' }
     return body.length in 12..40 && body.count { it.isDigit() } * 2 >= body.length
+}
+
+/**
+ * A reference written in letters as much as digits, which only counts right
+ * beside its label.
+ *
+ * Krungthai NEXT's is Ac and fifteen hex digits — Ac1f9e07d3b52c8a4 — which is
+ * as often under half digits as over, and the recogniser makes it fewer still:
+ * 5 comes back as S or h, 0 as O. Beside the label nothing else is printed, so
+ * a long run of letters with a few digits in it is the reference, misread or
+ * not. A misread one is no worse at its only job, which is to be the same
+ * every time the same picture is read.
+ */
+private fun lettered(c: String): Boolean {
+    val body = c.filter { it != '-' }
+    return body.length in 12..40 && body.count { it.isDigit() } >= 3 && body.count { it.isLetter() } >= 3
 }
 
 /**
@@ -2154,6 +2225,135 @@ private fun typed(text: String): String? {
     val t = text.trim().trimStart(':', '-', '.', '\u00B7').trim().replace(Regex("""\s+"""), " ")
     if (t.none { it.isLetterOrDigit() }) return null
     return if (t.length > MEMO_MAX) t.take(MEMO_MAX).trimEnd() else t
+}
+
+// ─── the memo, read a second time ────────────────────────────────────────────
+//
+// The page is turned black and white by one threshold, picked for the whole
+// slip, and a memo is the one line on it that no rule can check. On a real
+// Krungthai slip that threshold left the loopless ท of ทดสอบ101 looking like
+// เท, and the note said เทดสอบ101. The same line cut out of the picture and
+// thresholded on its own came back ทดสอบ101.
+//
+// One slip is not a reason, so before this was settled 400 were made: the
+// Krungthai slip and a K PLUS one with forty memos typed into them — ค่าข้าว,
+// ทรายแมว, ค่าน้ำค่าไฟ, Shopee — in five loopless fonts, and read the way the
+// phone reads them. The page alone got 281 of the memos exactly right; with the
+// line read a second time, 293. Not on every slip: the K PLUS ones went from
+// 123 to 138 and the Krungthai ones from 158 to 155, in fonts only a little
+// like Krungthai's own — which, on the real slip, went the other way. Neither
+// reading is right every time the other is wrong, so the second wins unless it
+// is clearly the worse one.
+
+/** One reading of a memo, and how sure the recogniser said it was, 0 to 100. */
+data class MemoRead(val text: String, val confidence: Float)
+
+/**
+ * How much surer the page has to be before its memo beats the second reading.
+ *
+ * The recogniser's own confidence was barely a signal: on the 400, readings it
+ * got wrong were on average three points less sure than readings it got right.
+ * Ten points is past that noise. Margins from five to twenty all came within
+ * two memos of each other.
+ */
+private const val MEMO_SURER = 10f
+
+/**
+ * The memo to keep, out of the page's reading of it and a reading of its line
+ * on its own.
+ *
+ * The second reading is passed over when it is empty, when it is a third
+ * longer or shorter than the first — a label or a neighbouring line got into
+ * the cut — or when the page was much surer of its own.
+ */
+fun betterMemo(page: MemoRead, again: MemoRead?): String? {
+    val first = memoOnLine(page.text) ?: return null
+    val second = again?.let { memoOnLine(it.text) } ?: return first
+    val a = memoKey(first)
+    val b = memoKey(second)
+    if (a == b) return first
+    if (abs(a.length - b.length) > maxOf(2, a.length / 3)) return first
+    if (page.confidence > again.confidence + MEMO_SURER) return first
+    return second
+}
+
+/**
+ * What follows a memo label on [line], or the whole line when it has none.
+ *
+ * A line read again on its own is cut from where its first word starts, with
+ * a little room around it, and on K PLUS that room reaches back into the
+ * label: the จำ: in front of the memo came back as `]:` and `1:`. So whatever
+ * is left of a label — a character or two and a colon — goes too, and so does
+ * anything in front that is not a letter or a digit.
+ */
+fun memoOnLine(line: String): String? {
+    var text = normalize(line).replace('\n', ' ').trim()
+    val hit = matches(TYPED, fold(text)).firstOrNull()
+    if (hit != null && hit.first <= 1) text = text.substring(hit.last + 1)
+    text = LABEL_END.replace(text.trim(), "").trimStart { !it.isLetterOrDigit() }
+    return typed(text)
+}
+
+/** The end of a label caught at the start of a line: `]:`, `1:`, `ำ:`, a bare colon. */
+private val LABEL_END = Regex("""^[^\s:;]{0,2}\s*[:;]\s*""")
+
+/** A memo the way two readings of it are compared: marks in order, no spaces, no colon in front. */
+fun memoKey(text: String): String =
+    normalize(text).filterNot { it.isWhitespace() }.trimStart(':', '-', '.', '\u00B7')
+
+/**
+ * Where on a line the memo starts: the index of its first word, or -1.
+ *
+ * [words] are one line's words as the recogniser split them, which for Thai is
+ * anywhere at all — `เท ด ส อ บ 101`. The memo is everything after its label,
+ * so it is the line's last few words; this is the fewest of them that still
+ * spell it, which leaves out a colon the recogniser made a word of its own —
+ * the cut starts at the memo, not at its label. Under Krungthai's layout the
+ * memo is the whole line.
+ */
+fun memoStart(words: List<String>, memo: String): Int {
+    val want = memoKey(memo)
+    if (want.isEmpty()) return -1
+    var start = -1
+    for (k in words.indices) {
+        val tail = memoKey(words.subList(k, words.size).joinToString(""))
+        if (tail == want) start = k
+        if (tail.length < want.length) break
+    }
+    return start
+}
+
+/**
+ * Where to cut a memo's line out of the picture: left, top, right, bottom.
+ *
+ * [words] are the boxes of the memo's words, each left, top, right, bottom.
+ * [before] is the box of the word in front of the memo on the same line, and
+ * [beforeText] what it says — the label, or its colon — both null when the
+ * memo has the line to itself.
+ *
+ * The recogniser's boxes for Thai letters are loose about where a letter
+ * starts. On a K PLUS test slip it put กาแฟ's ก five pixels wide when it is
+ * fifteen, and a cut made at the box read the half that was left as า; on the
+ * real K PLUS slip the colon's box ran fifteen pixels into อาหาร. So the cut
+ * reaches a whole line's height to either side, but not into a word in front:
+ * a colon is let in whole, since what is left of a label at the start of the
+ * second reading is taken off by [memoOnLine]; anything longer stops the cut at
+ * its edge.
+ */
+fun memoCut(words: List<IntArray>, before: IntArray?, beforeText: String?, width: Int, height: Int): IntArray {
+    val l = words.minOf { it[0] }
+    val t = words.minOf { it[1] }
+    val r = words.maxOf { it[2] }
+    val b = words.maxOf { it[3] }
+    val h = b - t
+    val padX = maxOf(8, h)
+    val padY = maxOf(4, h * 3 / 10)
+    var x0 = maxOf(0, l - padX)
+    if (before != null) {
+        val mark = beforeText != null && beforeText.none { it.isLetterOrDigit() }
+        x0 = maxOf(x0, minOf(if (mark) before[0] else before[2], l))
+    }
+    return intArrayOf(x0, maxOf(0, t - padY), minOf(width, r + padX), minOf(height, b + padY))
 }
 
 // ─── the time of day ─────────────────────────────────────────────────────────
