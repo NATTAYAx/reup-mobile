@@ -212,8 +212,10 @@
             android:visibility="gone">
 
             <FrameLayout
+                android:id="@+id/w_bar"
                 android:layout_width="0dp"
                 android:layout_height="4dp"
+                android:layout_marginEnd="10dp"
                 android:layout_weight="1">
 
                 <ImageView
@@ -236,7 +238,6 @@
                 android:id="@+id/w_count"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
                 android:fontFeatureSettings="tnum"
                 android:maxLines="1"
                 android:shadowColor="#59000000"

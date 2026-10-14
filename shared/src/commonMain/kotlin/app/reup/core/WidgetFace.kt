@@ -10,11 +10,19 @@ import kotlin.time.Duration.Companion.minutes
 
 // ─── WidgetFace.kt — what the home-screen widget says ────────────────────────
 //
-// THE SAME DAY AS THE TODAY TAB
+// ONE WINDOW FOR ALL OF IT
 //
-// The widget is the Today tab seen from the home screen. What it calls next is
-// what the tab calls next - todayFace decides, for both - so a glance at one
-// and then a look at the other never tells a person two different things.
+// The widget looks one day ahead, everywhere on it: the card, the list under
+// it and the bar all count the same twenty-four hours. The first version took
+// the card from the Today tab, which goes by the calendar, and the rest from
+// the day ahead, and at eight in the evening the two argued on the home screen
+// - "nothing resets today" over "done today 0 of 7", about the same seven
+// rounds resetting after midnight. For someone up past midnight those rounds
+// are tonight's, so the card now names the first of them. The Today tab keeps
+// the calendar; it has the room to show tomorrow as tomorrow.
+//
+// The desktop's board reads the day the same way (src/lib/widgetFace.ts), so
+// the desk and the phone still say one thing.
 //
 // WHY THE TIMES ARE CLOCKS AND NOT COUNTDOWNS
 //
@@ -49,11 +57,11 @@ data class WidgetFace(
     val date: String,
     /** "พุธ 14 ต.ค.", for the smallest size. */
     val dateShort: String,
-    /** The soonest thing due today: the Today tab's card. Null on a calm day. */
+    /** The soonest thing not done that is due within a day. Null on a calm day. */
     val next: WidgetLine?,
-    /** "วันนี้ทำครบแล้ว" or "วันนี้ไม่มีอะไรรีเซ็ต", exactly when [next] is null. */
+    /** "วันนี้ทำครบแล้ว" or "วันนี้ไม่มีอะไรรีเซ็ต", exactly when [next] is null: nothing due within a day. */
     val calm: String?,
-    /** On a calm day, the round the Today tab names after it, if any is queued. */
+    /** On a calm day, the first round after it, if any is queued. */
     val calmNext: WidgetLine?,
     /** Not done and due within a day, soonest first, after the one above. */
     val soon: List<WidgetLine>,
@@ -74,12 +82,12 @@ data class WidgetFace(
  *
  * The card at the top, the rounds within the next day, or the rounds further
  * out - and only one of them. The card's row is left out of both lists, on a
- * calm day too, where the card names tomorrow's first round in words.
+ * calm day too, where the card names the first round after it in words.
  *
  * "Within a day" rather than "today", because a daily that resets at four in
  * the morning is tonight's work at ten in the evening, though its alarm is
- * tomorrow's. The bar counts the same day: what was ticked today, and what is
- * still due within one.
+ * tomorrow's. The card and the bar count the same day: what was ticked today,
+ * and what is still due within one.
  *
  * WHAT IS FURTHER OUT
  *
@@ -89,8 +97,6 @@ data class WidgetFace(
  * asked not to be reminded, and a list of what is undone is a reminder.
  */
 fun widgetFace(rows: List<HomeRow>, now: Instant, zone: TimeZone, quiet: QuietHours?): WidgetFace {
-    val today = todayFace(rows, now, zone)
-    val head = today.next?.id ?: today.calm?.nextId
     val day = 24.hours
 
     val waiting = ArrayList<Pair<HomeRow, Instant>>()
@@ -101,6 +107,10 @@ fun widgetFace(rows: List<HomeRow>, now: Instant, zone: TimeZone, quiet: QuietHo
     waiting.sortBy { it.second }
 
     val within = waiting.filter { it.second - now <= day }
+    val nextPair = within.firstOrNull()
+    val upcoming = if (nextPair == null) waiting.firstOrNull() else null
+    val head = nextPair?.first?.id ?: upcoming?.first?.id
+
     val soon = within.filter { it.first.id != head }.map { lineOf(it.first, it.second, now, zone, ending = false) }
     val later = waiting
         .filter { (r, at) -> r.id != head && !r.paused && at - now > day }
@@ -109,20 +119,36 @@ fun widgetFace(rows: List<HomeRow>, now: Instant, zone: TimeZone, quiet: QuietHo
         .map { lineOf(it.first, it.second, now, zone, ending = true) }
 
     val done = rows.count { it.done && it.doneToday }
-    val nextRow = today.next
-    val calmRow = if (nextRow == null) waiting.firstOrNull { it.first.id == today.calm?.nextId } else null
     return WidgetFace(
         date = headerDate(now, zone),
         dateShort = shortDate(now, zone),
-        next = nextRow?.let { r -> r.fireAt?.let { lineOf(r, it, now, zone, ending = false) } },
-        calm = today.calm?.title,
-        calmNext = calmRow?.let { lineOf(it.first, it.second, now, zone, ending = false) },
+        next = nextPair?.let { lineOf(it.first, it.second, now, zone, ending = false) },
+        calm = when {
+            nextPair != null -> null
+            done > 0 -> "วันนี้ทำครบแล้ว"
+            else -> "วันนี้ไม่มีอะไรรีเซ็ต"
+        },
+        calmNext = upcoming?.let { lineOf(it.first, it.second, now, zone, ending = false) },
         soon = soon,
         later = later,
         done = done,
         load = done + within.size,
         quiet = inQuiet(now, quiet, zone),
     )
+}
+
+/**
+ * What the bar says, at the three widths: two cells, four, and four by four.
+ *
+ * Until something is ticked it says how much the day holds, and the bar itself
+ * is not drawn. "0 of 7" beside an empty bar is a score for an evening that
+ * has not happened yet, which the desktop's task list stopped printing long
+ * ago; this is the same rule.
+ */
+fun widgetTally(done: Int, load: Int): List<String> = when {
+    load <= 0 -> emptyList()
+    done <= 0 -> listOf("$load อย่าง", "$load อย่างใน 24 ชม.", "$load อย่างภายใน 24 ชั่วโมง")
+    else -> listOf("$done/$load", "ทำแล้ว $done/$load", "ทำแล้ว $done จาก $load")
 }
 
 private fun lineOf(r: HomeRow, at: Instant, now: Instant, zone: TimeZone, ending: Boolean): WidgetLine {
