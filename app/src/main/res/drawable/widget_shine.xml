@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The light that moves across the widget: a progress bar's spinner, which is
+  the one thing a widget is allowed to animate, given these frames instead of
+  a spinner.
+
+  WHAT IT COSTS
+
+  The home screen draws a frame only when the list says the frame changes:
+  24 frames of about a thirtieth of a second as the band crosses, five for the
+  glint, then five and a half seconds of nothing at all - no frames, no timer
+  firing, nothing awake. About one second of movement every seven and a half.
+  While the home screen is not on show - another app open, the screen off - a
+  progress bar stops its own animation, so this stops too.
+
+  The positions ease in and out (half linear, half smoothstep), so the band
+  sets off and slows rather than appearing at full speed. Each box is shifted
+  by a fraction of the widget's width, so the light crosses a two-by-two and
+  a four-by-four in the same time.
+
+  Fractions in an inset must stay under 100%, and do: the box moves at most
+  90% either way (widget_band.xml is the band inside it).
+-->
+<animation-list xmlns:android="http://schemas.android.com/apk/res/android"
+    android:oneshot="false">
+
+    <!--
+      A beat of stillness first. The home screen starts this list from the top
+      each time it comes back into view, so the light crosses a moment after
+      the home screen appears - not the instant it does, and not six seconds
+      later, when the glance is over.
+    -->
+    <item
+        android:drawable="@android:color/transparent"
+        android:duration="1200" />
+
+    <!-- Across, from just off the left edge to just off the right. -->
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-90%"
+            android:insetRight="90%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-86%"
+            android:insetRight="86%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-80%"
+            android:insetRight="80%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-74%"
+            android:insetRight="74%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-67%"
+            android:insetRight="67%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-60%"
+            android:insetRight="60%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-51%"
+            android:insetRight="51%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-43%"
+            android:insetRight="43%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-34%"
+            android:insetRight="34%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-24%"
+            android:insetRight="24%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-15%"
+            android:insetRight="15%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="-5%"
+            android:insetRight="5%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="5%"
+            android:insetRight="-5%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="15%"
+            android:insetRight="-15%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="24%"
+            android:insetRight="-24%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="34%"
+            android:insetRight="-34%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="43%"
+            android:insetRight="-43%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="51%"
+            android:insetRight="-51%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="60%"
+            android:insetRight="-60%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="67%"
+            android:insetRight="-67%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="74%"
+            android:insetRight="-74%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="80%"
+            android:insetRight="-80%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="86%"
+            android:insetRight="-86%" />
+    </item>
+
+    <item android:duration="30">
+        <inset
+            android:drawable="@drawable/widget_band"
+            android:insetLeft="90%"
+            android:insetRight="-90%" />
+    </item>
+
+    <!-- Then the glint, in the bottom-right corner, growing and going. -->
+
+    <item android:duration="50">
+        <layer-list>
+            <item
+                android:width="8dp"
+                android:height="8dp"
+                android:bottom="16dp"
+                android:drawable="@drawable/widget_star"
+                android:gravity="bottom|right"
+                android:right="16dp" />
+        </layer-list>
+    </item>
+
+    <item android:duration="60">
+        <layer-list>
+            <item
+                android:width="12dp"
+                android:height="12dp"
+                android:bottom="14dp"
+                android:drawable="@drawable/widget_star"
+                android:gravity="bottom|right"
+                android:right="14dp" />
+        </layer-list>
+    </item>
+
+    <item android:duration="80">
+        <layer-list>
+            <item
+                android:width="16dp"
+                android:height="16dp"
+                android:bottom="12dp"
+                android:drawable="@drawable/widget_star"
+                android:gravity="bottom|right"
+                android:right="12dp" />
+        </layer-list>
+    </item>
+
+    <item android:duration="60">
+        <layer-list>
+            <item
+                android:width="12dp"
+                android:height="12dp"
+                android:bottom="14dp"
+                android:drawable="@drawable/widget_star"
+                android:gravity="bottom|right"
+                android:right="14dp" />
+        </layer-list>
+    </item>
+
+    <item android:duration="50">
+        <layer-list>
+            <item
+                android:width="8dp"
+                android:height="8dp"
+                android:bottom="16dp"
+                android:drawable="@drawable/widget_star"
+                android:gravity="bottom|right"
+                android:right="16dp" />
+        </layer-list>
+    </item>
+
+    <!-- Then nothing at all until the next time round. -->
+    <item
+        android:drawable="@android:color/transparent"
+        android:duration="5500" />
+</animation-list>

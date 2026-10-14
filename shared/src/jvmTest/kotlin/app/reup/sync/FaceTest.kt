@@ -1,6 +1,9 @@
 package app.reup.core
 
+import app.reup.sync.TaskDraft
+import app.reup.sync.taskProblems
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -256,7 +259,7 @@ class FaceTest {
         val face = todayFace(listOf(row("Genshin", fourAm(1)), row("b", fourAm(2))), now, bkk)
         assertEquals(null, face.next)
         assertEquals(
-            Calm("วันนี้ไม่มีอะไรรีเซ็ต", "รอบถัดไปคือพรุ่งนี้ 04:00", "Genshin"),
+            Calm("วันนี้ไม่มีอะไรรีเซ็ต", "รอบถัดไปคือพรุ่งนี้ 04:00", "Genshin", nextId = "Genshin"),
             face.calm,
         )
         assertEquals(listOf("พรุ่งนี้ · จันทร์ 31 ส.ค.", "อังคาร 1 ก.ย."), face.sections.map { it.title })
@@ -483,5 +486,47 @@ class FaceTest {
             listOf(SetupWarning.BATTERY_MANAGED, SetupWarning.HIBERNATION, SetupWarning.INEXACT_ALARMS),
             setupWarnings(true, true, false, false, hibernationExempt = false),
         )
+    }
+
+    // ── the forms ──
+
+    @Test
+    fun `the day on a form's third date button`() {
+        val today = LocalDate(2026, 10, 13)
+        assertEquals("วันนี้", dayChip("2026-10-13", today))
+        assertEquals("เมื่อวาน", dayChip("2026-10-12", today))
+        assertEquals("พรุ่งนี้", dayChip("2026-10-14", today))
+        assertEquals("ศ. 9 ต.ค.", dayChip("2026-10-09", today))
+        assertEquals("พฤ. 15 ต.ค.", dayChip("2026-10-15", today))
+        assertEquals("ศ. 26 ธ.ค. 2025", dayChip("2025-12-26", today))
+        assertEquals("ไม่ใช่วันที่", dayChip("ไม่ใช่วันที่", today))
+    }
+
+    @Test
+    fun `a picked time is written the way the desktop writes it`() {
+        assertEquals("04:00", resetTimeText(4, 0))
+        assertEquals("00:05", resetTimeText(0, 5))
+        assertEquals("23:59", resetTimeText(23, 59))
+        assertEquals("23:59", resetTimeText(24, 75), "pulled back in, not thrown")
+        // Every minute of the day comes back as itself, and passes the check
+        // the desktop and the save both make.
+        for (h in 0..23) for (m in 0..59) {
+            val text = resetTimeText(h, m)
+            assertEquals(h to m, resetTimeParts(text), text)
+            assertEquals(emptyList(), taskProblems(TaskDraft(name = "x", resetType = "daily", resetTime = text)), text)
+        }
+    }
+
+    @Test
+    fun `a stored time opens the picker where it is set`() {
+        assertEquals(4 to 0, resetTimeParts("04:00"))
+        assertEquals(9 to 30, resetTimeParts("9:30"), "an older row's spelling still opens")
+        assertEquals(9 to 30, resetTimeParts(" 09:30 "))
+        assertEquals(null, resetTimeParts(null), "no time is the end of the day")
+        assertEquals(null, resetTimeParts(""))
+        assertEquals(null, resetTimeParts("25:00"))
+        assertEquals(null, resetTimeParts("04:60"))
+        assertEquals(null, resetTimeParts("04:00:00"))
+        assertEquals(null, resetTimeParts("สิ้นวัน"))
     }
 }

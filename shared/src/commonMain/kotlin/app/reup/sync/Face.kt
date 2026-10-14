@@ -41,7 +41,8 @@ internal val THAI_DAYS = listOf(
     "อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์",
 )
 
-private val THAI_DAYS_SHORT = listOf("อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.")
+/** Shared with the widget, which says "ศ. 04:00" in the same two letters. */
+internal val THAI_DAYS_SHORT = listOf("อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.")
 
 internal val THAI_MONTHS = listOf(
     "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -274,6 +275,8 @@ data class HomeRow(
     val category: String? = null,
     /** Comes back on its own. A one-off that is ticked is simply done. */
     val recurring: Boolean = true,
+    /** Comes back less often than every day. See [longCycle]. */
+    val longCycle: Boolean = false,
 )
 
 /** A group of rows under one heading, with anything they all share said once. */
@@ -305,6 +308,8 @@ data class Calm(
     val nextAt: String?,
     /** Whose round that is. */
     val nextName: String?,
+    /** And which row, for a screen that names it once and must not list it again. */
+    val nextId: String? = null,
 )
 
 /** Said once per section when it is true of every row in it. See [todayFace]. */
@@ -401,6 +406,7 @@ fun todayFace(rows: List<HomeRow>, now: Instant, zone: TimeZone): TodayFace {
             title = if (doneToday.isNotEmpty()) "วันนี้ทำครบแล้ว" else "วันนี้ไม่มีอะไรรีเซ็ต",
             nextAt = upcoming?.fireAt?.let { "รอบถัดไปคือ" + whenWords(it, now, zone) },
             nextName = upcoming?.name,
+            nextId = upcoming?.id,
         )
     }
     return TodayFace(next, calm, sections)
@@ -536,6 +542,20 @@ fun recurs(spec: ResetSpec): Boolean = spec.resetType in setOf(
     ResetType.DAILY, ResetType.WEEKLY, ResetType.BIWEEKLY, ResetType.CUSTOM_DAYS,
 )
 
+/**
+ * Whether a task comes back less often than every day: weekly, every two
+ * weeks, every few days.
+ *
+ * What the widget lists under รอบยาวที่ยังไม่ทำ. A daily is never there - its
+ * round always ends within a day, so it is either today's or done - and
+ * "every 1 day" is a daily however it was typed in.
+ */
+fun longCycle(spec: ResetSpec): Boolean = when (spec.resetType) {
+    ResetType.WEEKLY, ResetType.BIWEEKLY -> true
+    ResetType.CUSTOM_DAYS -> (spec.resetIntervalDays ?: 0) > 1
+    else -> false
+}
+
 /** The desktop's four task categories, in its Thai. Null for anything else. */
 fun categoryName(key: String?): String? = when (key) {
     "game" -> "เกม"
@@ -558,3 +578,58 @@ fun tickedToday(completedAt: String?, now: Instant, zone: TimeZone): Boolean {
     val at = runCatching { Instant.parse(raw) }.getOrNull() ?: return false
     return at.toLocalDateTime(zone).date == now.toLocalDateTime(zone).date
 }
+
+// ─── the forms ───────────────────────────────────────────────────────────────
+
+/**
+ * The day a form is set to, on its third date button: "วันนี้", "เมื่อวาน",
+ * "พรุ่งนี้", or "ศ. 9 ต.ค.".
+ *
+ * Short, because it shares a line with the two buttons that are always there:
+ * วันนี้ and เมื่อวาน on the money form, where most money is written down the day
+ * it goes or the morning after, and วันนี้ and พรุ่งนี้ on the task form, which
+ * looks the other way. Another year adds the year, as the headings do.
+ *
+ * @param date `YYYY-MM-DD` as stored; anything else is printed as it is
+ */
+fun dayChip(date: String, today: LocalDate): String {
+    val d = runCatching { LocalDate.parse(date.take(10)) }.getOrNull() ?: return date
+    return when (today.daysUntil(d)) {
+        0 -> "วันนี้"
+        -1 -> "เมื่อวาน"
+        1 -> "พรุ่งนี้"
+        else -> THAI_DAYS_SHORT[d.dayOfWeek.isoDayNumber % 7] + " " + d.dayOfMonth + " " +
+            THAI_MONTHS_SHORT[d.monthNumber - 1] + if (d.year != today.year) " " + d.year else ""
+    }
+}
+
+/**
+ * A clock's hour and minute as a task's reset_time: "04:00", the one spelling
+ * the desktop writes and taskProblems accepts.
+ *
+ * Here rather than beside the time picker. The picker answers in two numbers
+ * whatever the phone's language, and the step from those to the string is the
+ * part that could disagree with the desktop - which is why the old form had a
+ * text box instead of a clock. Out of range is pulled back in rather than
+ * thrown: a picker never sends one, and a form is no place to crash.
+ */
+fun resetTimeText(hour: Int, minute: Int): String =
+    pad2(hour.coerceIn(0, 23)) + ":" + pad2(minute.coerceIn(0, 59))
+
+/**
+ * A stored reset_time as the hour and minute to open the picker on, or null
+ * for no time at all - the end of the day - or for something that is not a
+ * time of day.
+ *
+ * Lenient about "9:00", as everything that reads a stored time is: a row an
+ * older version wrote still opens where it is set, and is saved back as
+ * "09:00".
+ */
+fun resetTimeParts(text: String?): Pair<Int, Int>? {
+    val m = RESET_TIME_READ.matchEntire(text?.trim() ?: return null) ?: return null
+    val hour = m.groupValues[1].toInt()
+    val minute = m.groupValues[2].toInt()
+    return if (hour in 0..23 && minute in 0..59) hour to minute else null
+}
+
+private val RESET_TIME_READ = Regex("""^(\d{1,2}):(\d{2})$""")

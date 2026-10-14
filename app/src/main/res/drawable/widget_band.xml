@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The band of light that crosses the card, tilted, soft on both sides: the
+  middle 30% of whatever box it is put in, and taller than it, so the tilt
+  never shows an end. widget_shine.xml moves the box.
+
+  A gradient rather than a picture, so the home screen draws it directly and
+  keeps no copy of it in memory between frames.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetBottom="-20%"
+    android:insetLeft="35%"
+    android:insetRight="35%"
+    android:insetTop="-20%">
+    <rotate
+        android:fromDegrees="20"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toDegrees="20">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:centerColor="#24FFFFFF"
+                android:endColor="#00FFFFFF"
+                android:startColor="#00FFFFFF" />
+        </shape>
+    </rotate>
+</inset>

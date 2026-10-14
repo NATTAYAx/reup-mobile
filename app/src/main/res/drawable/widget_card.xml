@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The card. Drawn in the default theme's colour so the widget list's preview
+  looks right; ReupWidget paints it in the theme in use with a colour filter,
+  which keeps the shape and changes the colour.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/widget_radius" />
+    <solid android:color="#111827" />
+</shape>

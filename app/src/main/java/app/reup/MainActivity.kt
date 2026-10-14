@@ -14,9 +14,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import app.reup.ui.AppActions
 import app.reup.ui.HomeModel
+import app.reup.ui.HomeTab
 import app.reup.ui.ReupApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,11 +53,14 @@ import kotlinx.coroutines.launch
  *
  * A tap on a row ticks it and holding it opens it. The sync runs when the app
  * opens, after a tick, and on a clock that slows down when nothing is moving.
- * Nothing runs in the background except the one thing that has to — reading a
- * slip a bank's app has just saved, when that has been turned on; SlipWatch
- * says how little that is. The other screens - adding a task, writing down
- * money, sync settings, the slip reader - are the same screens as before for
- * now, opened from here.
+ * Nothing runs in the background except two things that have to, each only
+ * once it has been turned on: reading a slip a bank's app has just saved, and
+ * reading a bank's notification of money coming in. SlipWatch and
+ * BankNoticeListener say how little each is. The widget is drawn when
+ * something it shows changes, and not otherwise (ReupWidget). The two forms - writing down
+ * money, adding a task - are Compose too, in activities of their own; sync
+ * settings and the slip reader are the same screens as before for now, opened
+ * from here.
  */
 class MainActivity : ComponentActivity(), AppActions {
 
@@ -72,6 +77,43 @@ class MainActivity : ComponentActivity(), AppActions {
      */
     private val askPhotos = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         model.photoAccessAnswered()
+    }
+
+    /**
+     * What was pressed under a slip's picture, done here as if on its row: the
+     * same save, the same form, the same "เอาคืน" after throwing it away. A
+     * slip settled some other way while its picture was open is no longer in
+     * the list, and its answer is dropped.
+     */
+    private val pictureAnswer = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        if (result.resultCode != RESULT_OK || data == null) return@registerForActivityResult
+        val id = data.getLongExtra(SlipPictureActivity.EXTRA_ID, -1L)
+        val slip = PendingSlips.get(this, id) ?: return@registerForActivityResult
+        when (data.getStringExtra(SlipPictureActivity.EXTRA_ANSWER)) {
+            SlipPictureActivity.SAVE -> model.saveSlip(slip)
+            SlipPictureActivity.EDIT -> editSlip(id)
+            SlipPictureActivity.DISCARD -> model.dismissSlip(slip)
+        }
+    }
+
+    /**
+     * The two forms, opened from here for a result: what was saved, in words,
+     * said along the bottom of the tab the form was opened from, where the new
+     * row now is. See finishSaying.
+     */
+    private val formAnswer = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val said = result.data?.getStringExtra(EXTRA_SAID)
+        if (result.resultCode == RESULT_OK && said != null) model.say(said)
+    }
+
+    /**
+     * The system's photo picker, for the widget's picture. It hands back the
+     * one picture or clip picked and asks for no permission, because it gives
+     * none: this app sees what was picked and nothing else.
+     */
+    private val pickPicture = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) model.widget.picked(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,7 +134,25 @@ class MainActivity : ComponentActivity(), AppActions {
         requestNotificationPermission()
 
         model = HomeModel(applicationContext, scope)
+        // Opened from the widget. Not on a recreation, which carries the same
+        // intent and would undo a tab the person has since moved to.
+        if (savedInstanceState == null) openFrom(intent)
         setContent { ReupApp(model, this) }
+    }
+
+    /** The widget tapped while the app was already open. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openFrom(intent)
+    }
+
+    /** The tab a tap on the widget asked for: the wallet opens money, anywhere else Today. */
+    private fun openFrom(intent: Intent?) {
+        when (ReupWidget.tabOf(intent)) {
+            ReupWidget.OPEN_MONEY -> model.openTab(HomeTab.MONEY)
+            ReupWidget.OPEN_TODAY -> model.openTab(HomeTab.TODAY)
+        }
     }
 
     override fun onResume() {
@@ -123,19 +183,19 @@ class MainActivity : ComponentActivity(), AppActions {
     // ─── what the screens ask for ───────────────────────────────────────────
 
     override fun addTask() {
-        startActivity(Intent(this, AddTaskActivity::class.java))
+        formAnswer.launch(Intent(this, AddTaskActivity::class.java))
     }
 
     override fun editTask(uid: String) {
-        startActivity(Intent(this, AddTaskActivity::class.java).putExtra(AddTaskActivity.EXTRA_UID, uid))
+        formAnswer.launch(Intent(this, AddTaskActivity::class.java).putExtra(AddTaskActivity.EXTRA_UID, uid))
     }
 
     override fun addMoney(incoming: Boolean) {
-        startActivity(Intent(this, AddMoneyActivity::class.java).putExtra(AddMoneyActivity.EXTRA_INCOMING, incoming))
+        formAnswer.launch(Intent(this, AddMoneyActivity::class.java).putExtra(AddMoneyActivity.EXTRA_INCOMING, incoming))
     }
 
     override fun editMoney(uid: String) {
-        startActivity(Intent(this, AddMoneyActivity::class.java).putExtra(AddMoneyActivity.EXTRA_EDIT_UID, uid))
+        formAnswer.launch(Intent(this, AddMoneyActivity::class.java).putExtra(AddMoneyActivity.EXTRA_EDIT_UID, uid))
     }
 
     override fun openSync() {
@@ -156,7 +216,49 @@ class MainActivity : ComponentActivity(), AppActions {
 
     override fun editSlip(id: Long) {
         val slip = PendingSlips.get(this, id) ?: return
-        startActivity(PendingSlips.editIntent(this, slip))
+        formAnswer.launch(PendingSlips.editIntent(this, slip))
+    }
+
+    override fun viewSlip(id: Long) {
+        pictureAnswer.launch(SlipPictureActivity.intent(this, id, answers = true))
+    }
+
+    override fun editIncome(id: String) {
+        val income = BankNotices.get(this, id) ?: return
+        formAnswer.launch(BankNotices.editIntent(this, income))
+    }
+
+    /**
+     * The page with this app's own switch where the phone has one, the list of
+     * every app that asked where it does not, and the app's page if a maker
+     * has moved both. Answered by coming back: HomeModel.resume asks again.
+     */
+    override fun openNotificationAccess() {
+        try {
+            startActivity(BankNotices.accessIntent(this))
+        } catch (e: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            } catch (e2: Exception) {
+                openAppSettings()
+            }
+        }
+    }
+
+    override fun pickWidgetPicture() {
+        try {
+            pickPicture.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+        } catch (e: Exception) {
+            model.say("เปิดที่เลือกรูปไม่ได้")
+        }
+    }
+
+    /**
+     * The home screen's own "add this widget?" where it has one. Where it has
+     * not, the words say how: Android cannot put a widget anywhere by itself.
+     */
+    override fun placeWidget() {
+        if (!ReupWidget.pin(this)) model.say("กดค้างที่หน้าจอหลัก เลือกวิดเจ็ต แล้วหา Reup")
     }
 
     // ─── system pages ───────────────────────────────────────────────────────

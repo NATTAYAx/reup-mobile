@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A wash of the theme's light colour from the top-left corner, on a card with
+  no picture. Recoloured by ReupWidget; only how see-through it is stays.
+  Rounded like the card, so a home screen that does not clip still sees none
+  of it past the corners.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/widget_radius" />
+    <gradient
+        android:centerX="0.08"
+        android:centerY="0"
+        android:endColor="#00A78BFA"
+        android:gradientRadius="95%"
+        android:startColor="#59A78BFA"
+        android:type="radial" />
+</shape>

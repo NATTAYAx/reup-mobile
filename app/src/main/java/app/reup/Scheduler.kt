@@ -132,6 +132,12 @@ object Scheduler {
             "scheduled ${alarms.size} alarms from ${tasks.size} tasks; " +
                     "next=${alarms.firstOrNull()?.fireAt}",
         )
+
+        // Every way a task changes passes through here - an edit, a tick, a
+        // sync, an alarm, a reboot - so this is where the widget hears of it.
+        // Asked for, not drawn: a widget that cannot be drawn must not be a
+        // queue that was not set.
+        ReupWidget.redraw(context)
     }
 
     /**

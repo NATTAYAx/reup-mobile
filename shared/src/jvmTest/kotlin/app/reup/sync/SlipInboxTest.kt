@@ -143,6 +143,46 @@ class SlipInboxTest {
         "เทดสอบ101",
     ).joinToString("\n")
 
+    /**
+     * K PLUS at 14:07 the next day, to the same person's PromptPay, with no
+     * memo. The recogniser read the payer's น.ส. as `Wa.`, so the payer was no
+     * name at all and the transfer was offered as spending.
+     */
+    private val kplusTitleLost = listOf(
+        "โอนเงินสําเร็จ",
+        "12 ต.ค. 69 14:07 น",
+        "1<+",
+        "Wa. สมศรี ใ",
+        "THAILAND",
+        "ธ.กสิกรไทย",
+        "XXX-X-X4410-X",
+        "อบแ",
+        "ไทยพรั",
+        "47",
+        "ชุบป:",
+        "i",
+        "ปินเจ้าภาพ",
+        "ทศ:",
+        "นรน",
+        "Tan ง 2509",
+        "[อสว1",
+        "น.ส. สมศรี ใจงาม",
+        "รหัสพร้อมเพย์",
+        "XXX-XXX-1207",
+        "จํานวน:",
+        "1.00 บาท",
+        "OK",
+        "ค่าธรรมเนียม:",
+        "i",
+        "Pes",
+        "0.00 บาท",
+        "[ๆ",
+        "เลขที่รายการ:",
+        "สแกน",
+        "016285140000APP05678",
+        "ตรวจสอบสลิป",
+    ).joinToString("\n")
+
     // ── hand-made ────────────────────────────────────────────────────────────
 
     /** Somebody else, everything readable. The case one press is for. */
@@ -241,6 +281,23 @@ class SlipInboxTest {
         assertFalse(paidToSelf("น.ส. สมศรี ใ\nน.ส. สมศรี ดีมาก"), "the same first name, somebody else")
         assertFalse(paidToSelf("น.ส. สมศรี ใ\nนาย สมศรี ใจงาม"), "the title is part of who it is")
         assertFalse(paidToSelf("Mr. John S\nMrt station John Smith"), "mrt is not mr")
+    }
+
+    @Test
+    fun `a payer whose title the recogniser turned into Latin is still the payer`() {
+        assertTrue(paidToSelf(kplusTitleLost), "น.ส. read as Wa.")
+        val d = draft(kplusTitleLost, at(14, 7, day = 12))
+        assertEquals("2026-10-12", d.date)
+        assertEquals("016285140000APP05678", d.reference)
+        assertEquals("", d.note, "nothing was typed")
+        assertTrue(d.toSelf)
+        assertFalse(d.oneTap)
+        assertTrue(paidToSelf("สมศรี ใ\nน.ส. สมศรี ใจงาม"), "the title gone altogether")
+        // A line of plain Thai words is a name only beside one with its title.
+        assertFalse(paidToSelf("สมศรี ใ\nสมศรี ใจงาม"), "no title on either")
+        assertFalse(paidToSelf("น.ส. สมศรี ใ\nร้านสมศรี ข้าวมันไก่"), "a shop")
+        assertFalse(paidToSelf("Wa. สมศรี ใ\nนาย สมชาย ดีมาก"), "somebody else")
+        assertFalse(paidToSelf(lunch), "still somebody else")
     }
 
     // ── the two real slips ───────────────────────────────────────────────────

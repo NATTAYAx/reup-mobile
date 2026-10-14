@@ -88,7 +88,7 @@ fun memoCategory(memo: String?, categories: List<Category>): MemoSplit {
     // Positions are carried from one to the other, so they must line up.
     if (lower.length != text.length) return MemoSplit(null, text)
     val (best, end) = named(lower, categories, exact = true) ?: named(lower, categories, exact = false)
-        ?: return MemoSplit(null, text)
+    ?: return MemoSplit(null, text)
     val rest = text.substring(end).trimStart(' ', '-', ':', ',', '.', '/', '|', '\u00B7').trim()
     return MemoSplit(best, rest)
 }
@@ -186,7 +186,12 @@ private fun titlePattern(title: String): Regex {
 /** Words a slip may print on the same line before a name. */
 private val SIDES = listOf("จาก", "ไปยัง", "ถึง", "ผู้โอน", "ผู้รับ", "from", "to").map { bare(it) }
 
-private class Person(val joined: String, val words: Int)
+/**
+ * A name as one line of a slip prints it: its words run together, how many
+ * words there were, and the title it is compared as — null when the line had
+ * no title the rules know.
+ */
+private class Person(val title: String?, val name: String, val words: Int)
 
 /**
  * A line the way two names on one slip are compared: lower case, no Thai marks
@@ -207,7 +212,15 @@ private fun bare(s: String): String {
     return sb.toString()
 }
 
-/** The person a line names, or null when it does not start with a title. */
+/**
+ * The person a line names, or null when it names nobody.
+ *
+ * Behind a title, any words. Without one, two Thai words or more and nothing
+ * else: a name whose title the recogniser lost, or turned into Latin — on a
+ * real K PLUS slip the payer's น.ส. came back as `Wa.`, and a short token like
+ * that in front is passed over. A line like this is a name only next to one
+ * that has its title; see [paidToSelf].
+ */
 private fun personOn(line: String): Person? {
     var t = bare(line.trim())
     for (s in SIDES) {
@@ -224,15 +237,26 @@ private fun personOn(line: String): Person? {
         written = m.value
         break
     }
-    if (title == null) return null
-    val rest = t.substring(written.length)
-    // A title glued to a word that carries on is not a title: นายหน้า, mrt.
-    val first = rest.firstOrNull() ?: return null
-    if (title.last() in 'a'..'z' && !written.endsWith('.') && !written.endsWith(' ') && first.isLetter()) return null
-    val words = rest.replace('*', ' ').trim().trimEnd('.').split(' ').filter { it.isNotEmpty() }
-    if (words.isEmpty()) return null
-    return Person(title + words.joinToString(""), words.size)
+    if (title != null) {
+        val rest = t.substring(written.length)
+        // A title glued to a word that carries on is not a title: นายหน้า, mrt.
+        val first = rest.firstOrNull() ?: return null
+        if (title.last() in 'a'..'z' && !written.endsWith('.') && !written.endsWith(' ') && first.isLetter()) return null
+        val words = wordsOf(rest)
+        if (words.isEmpty()) return null
+        return Person(title, words.joinToString(""), words.size)
+    }
+    var words = wordsOf(t)
+    if (words.size > 2 && words[0].length <= 4 && words[0].any { !thaiLetter(it) }) words = words.drop(1)
+    if (words.size < 2 || words.any { w -> w.any { !thaiLetter(it) } }) return null
+    return Person(null, words.joinToString(""), words.size)
 }
+
+private fun wordsOf(s: String): List<String> =
+    s.replace('*', ' ').trim().trimEnd('.').split(' ').filter { it.isNotEmpty() }
+
+/** A Thai letter or vowel that stands on the line — what a bare Thai name is made of. */
+private fun thaiLetter(c: Char): Boolean = c in '\u0E01'..'\u0E2E' || c in '\u0E30'..'\u0E33' || c in '\u0E40'..'\u0E46'
 
 /**
  * Whether the money went to the person who sent it: from one of their own
@@ -242,20 +266,32 @@ private fun personOn(line: String): Person? {
  * ledger that counted every top-up as an expense would count the same baht
  * twice, once going into the wallet and once going out of it.
  *
- * A Thai slip prints the payer first and the payee second, each behind a
- * title, and hides part of the payer's name: K PLUS cuts it after the first
- * letter of the surname, Krungthai prints stars. So the payee's full name has
- * to begin with everything that is left of the payer's. A payer with no
- * surname left at all proves nothing — two people share a first name all the
- * time — and is not counted.
+ * A Thai slip prints the payer first and the payee second, and hides part of
+ * the payer's name: K PLUS cuts it after the first letter of the surname,
+ * Krungthai prints stars. So the payee's full name has to begin with
+ * everything that is left of the payer's. A payer with no surname left at all
+ * proves nothing — two people share a first name all the time — and is not
+ * counted.
+ *
+ * Each name normally sits behind a title, and two titles that differ are two
+ * people. One of the two may have lost its title to the recogniser; the other
+ * must still have one, so that two lines of ordinary Thai words — a shop's
+ * name, a memo — are never taken for a person sending money to themselves.
  */
 fun paidToSelf(raw: String): Boolean {
     val people = raw.split('\n').mapNotNull { personOn(it) }
-    if (people.size < 2) return false
-    val payer = people[0]
-    val payee = people[1]
-    if (payer.words < 2 || payee.words < 2) return false
-    return payee.joined.startsWith(payer.joined)
+    for (i in people.indices) {
+        val payer = people[i]
+        if (payer.words < 2 || payer.name.length < 3) continue
+        for (j in i + 1 until people.size) {
+            val payee = people[j]
+            if (payee.words < 2) continue
+            if (payer.title == null && payee.title == null) continue
+            if (payer.title != null && payee.title != null && payer.title != payee.title) continue
+            if (payee.name.startsWith(payer.name)) return true
+        }
+    }
+    return false
 }
 
 // ─── the draft ───────────────────────────────────────────────────────────────
@@ -309,7 +345,7 @@ data class SlipDraft(
     /** Nothing left to check: one press may write it. */
     val oneTap: Boolean
         get() = amount != null && amount > 0.0 && currency != null && !toSelf &&
-            problems.none { it in BLOCKING }
+                problems.none { it in BLOCKING }
 }
 
 /**

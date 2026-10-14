@@ -157,6 +157,27 @@ fun moneyDayTitle(date: String, today: LocalDate): String {
     }
 }
 
+/**
+ * What the amount box holds after a keystroke or a paste, or null to refuse
+ * it and keep what was there.
+ *
+ * Digits and at most one point, so "not a number" is a sentence nobody gets
+ * to see. Commas and spaces are taken out rather than refused: a pasted
+ * "1,200.00" is twelve hundred, which in every place this app is used is what
+ * it means. Twelve digits before the point and four after are more than any
+ * slip carries; past that it is a finger resting on a key.
+ *
+ * A lone "." is let through, because it is how "0.5" starts being typed. The
+ * save refuses it if that is still all there is.
+ */
+fun typedAmount(typed: String): String? {
+    val clean = typed.filterNot { it == ',' || it.isWhitespace() }
+    return if (AMOUNT_TYPED.matches(clean)) clean else null
+}
+
+/** [0-9] rather than \d, which on some platforms is every script's digits. */
+private val AMOUNT_TYPED = Regex("""[0-9]{0,12}(\.[0-9]{0,4})?""")
+
 /** "ตุลาคม", for the line above the title. */
 fun monthName(monthNumber: Int): String = THAI_MONTHS.getOrElse(monthNumber - 1) { "" }
 
