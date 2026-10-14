@@ -10,35 +10,37 @@ import android.provider.Settings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.reup.BankNoticeListener
+import app.reup.BankNotices
 import app.reup.DeviceNotifyPrefs
 import app.reup.Notifications
+import app.reup.PendingIncome
 import app.reup.PendingSlip
 import app.reup.PendingSlips
 import app.reup.Repo
+import app.reup.ReupWidget
 import app.reup.Scheduler
 import app.reup.SlipWatch
 import app.reup.Ui
+import app.reup.homeRows
 import app.reup.core.Alarm
 import app.reup.core.DeviceNotify
 import app.reup.core.HomeRow
 import app.reup.core.QuietHours
 import app.reup.core.ScheduledTask
 import app.reup.core.SetupWarning
-import app.reup.core.cadencePhrase
-import app.reup.core.homeOrder
 import app.reup.core.horizon
+import app.reup.core.moneyLine
+import app.reup.core.moneyText
 import app.reup.core.nextPerTask
-import app.reup.core.recurs
 import app.reup.core.setupWarnings
-import app.reup.core.tickedToday
 import app.reup.sync.CURRENCY_FALLBACK
 import app.reup.sync.Category
 import app.reup.sync.MoneyEntry
 import app.reup.sync.MoneySummary
 import app.reup.sync.SyncBackend
 import app.reup.sync.TaskInfo
-import app.reup.sync.isDoneNow
-import app.reup.sync.isoMillis
+import app.reup.sync.arrivalIncome
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -75,6 +77,15 @@ class Notice(
     }
 }
 
+/** A tab asked for from outside the screens - a tap on the widget. Two asks for one tab are still two. */
+class TabAsk(val tab: HomeTab) {
+    val id: Long = next++
+
+    private companion object {
+        var next = 0L
+    }
+}
+
 /** The money tab's numbers, read together so the total and the list never disagree. */
 data class MoneyView(
     val loaded: Boolean = false,
@@ -86,6 +97,15 @@ data class MoneyView(
     val summary: MoneySummary? = null,
     val entries: List<MoneyEntry> = emptyList(),
     val categories: Map<String, Category> = emptyMap(),
+)
+
+/** Money coming in off a bank's notifications, as the settings screen shows it. */
+data class IncomeWatchView(
+    val on: Boolean = false,
+    /** Whether the phone lets this app read notifications. Changed only in its settings. */
+    val access: Boolean = false,
+    /** The last money-in notice read and what became of it, after "ล่าสุด". */
+    val last: String? = null,
 )
 
 /** Slips arriving on their own, as the settings screen shows it. */
@@ -158,6 +178,13 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
     var slipWatch by mutableStateOf(SlipWatchView())
         private set
 
+    /** Money that came in, off a bank's notification, waiting for a yes or a no. */
+    var incomes by mutableStateOf<List<PendingIncome>>(emptyList())
+        private set
+
+    var incomeWatch by mutableStateOf(IncomeWatchView())
+        private set
+
     /** The albums to pick from while that list is open; null when it is not. */
     var albumChoices by mutableStateOf<List<SlipWatch.Album>?>(null)
         private set
@@ -166,6 +193,13 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
     private var wantSlips = false
 
     var notice by mutableStateOf<Notice?>(null)
+        private set
+
+    /** The widget's settings and its frame picker. */
+    val widget = WidgetModel(ctx, scope) { say(it) }
+
+    /** The tab the widget asked for, for the screen to go to once. */
+    var tabAsk by mutableStateOf<TabAsk?>(null)
         private set
 
     // ── bookkeeping ─────────────────────────────────────────────────────────
@@ -180,38 +214,14 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
     // ── the list ────────────────────────────────────────────────────────────
 
     /**
-     * The tasks as rows, in the order homeOrder gives them.
+     * The tasks as rows, in the order homeOrder gives them. The widget draws
+     * from the same function, so the two never disagree about what is done.
      *
      * Read on every frame that needs it rather than cached: it is a few dozen
      * rows, and a cache is one more thing that can disagree with the state it
      * was made from.
      */
-    fun rows(): List<HomeRow> {
-        val nowIso = isoMillis(now.toEpochMilliseconds())
-        val done = tasks.map { it.id }.filter { isDoneNow(infos[it]?.completedUntil, nowIso) }.toSet()
-        val order = homeOrder(tasks.map { it.id }, next.map { it.taskId }, done)
-        val soonest = HashMap<String, Alarm>()
-        for (a in next) if (!soonest.containsKey(a.taskId)) soonest[a.taskId] = a
-        val byId = tasks.associateBy { it.id }
-        return order.mapNotNull { id ->
-            val task = byId[id] ?: return@mapNotNull null
-            val info = infos[id]
-            val alarm = soonest[id]
-            HomeRow(
-                id = id,
-                name = info?.name ?: "งาน",
-                fireAt = alarm?.fireAt,
-                silent = alarm?.silent ?: false,
-                done = id in done,
-                resetAt = alarm?.resetAt,
-                doneToday = tickedToday(info?.completedAt, now, zone),
-                paused = task.pausedUntil?.let { it > now } == true,
-                cadence = cadencePhrase(task.spec),
-                category = info?.category,
-                recurring = recurs(task.spec),
-            )
-        }
-    }
+    fun rows(): List<HomeRow> = homeRows(tasks, infos, next, now, zone)
 
     // ── the clock ───────────────────────────────────────────────────────────
 
@@ -231,10 +241,13 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
 
         // A slip can arrive while the app is open — the watcher runs in this
         // same process — and the money tab should not need reopening to show
-        // it. A read of a small list from memory, every few seconds.
+        // it. The same for money in, which the notification listener hands
+        // over in this process too. A read of two small lists from memory,
+        // every few seconds.
         if (++ticksSinceSlips >= 3) {
             ticksSinceSlips = 0
             slips = PendingSlips.all(ctx)
+            refreshIncome()
         }
 
         quietTicks++
@@ -264,6 +277,11 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
         deviceNotify = DeviceNotifyPrefs.get(ctx)
         refreshWarnings()
         refreshSlips()
+        widget.resume()
+        // The shade first: a notice posted while the listener was held back is
+        // still there, and this is the moment that is never held back.
+        BankNoticeListener.catchUp(ctx)
+        refreshIncome(BankNotices.hasAccess(ctx))
         quietTicks = 0
         scope.launch {
             try {
@@ -423,6 +441,8 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
         if (id == themeId) return
         Ui.setTheme(ctx, id)
         themeId = id
+        // The widget is drawn in the theme too.
+        ReupWidget.redraw(ctx)
         scope.launch {
             try {
                 Repo.setThemeId(ctx, id)
@@ -440,7 +460,10 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
      */
     private suspend fun adoptTheme() {
         try {
-            if (Ui.adopt(ctx, Repo.themeId(ctx))) themeId = Ui.themeId(ctx)
+            if (Ui.adopt(ctx, Repo.themeId(ctx))) {
+                themeId = Ui.themeId(ctx)
+                ReupWidget.redraw(ctx)
+            }
         } catch (e: Exception) {
             // Stays as it is.
         }
@@ -483,6 +506,8 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
             try {
                 Repo.money(ctx).delete(e)
                 readMoney()
+                // The widget's month line, if it shows one.
+                ReupWidget.redraw(ctx)
                 notice = Notice("ลบแล้ว")
                 quietSync()
             } catch (x: Exception) {
@@ -493,6 +518,11 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
 
     fun say(text: String) {
         notice = Notice(text)
+    }
+
+    /** Go to [tab], from outside the screens: the widget, through MainActivity. */
+    fun openTab(tab: HomeTab) {
+        tabAsk = TabAsk(tab)
     }
 
     // ── slips that arrive on their own ──────────────────────────────────────
@@ -638,6 +668,78 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
             onAction = {
                 PendingSlips.add(ctx, slip)
                 refreshSlips()
+            },
+        )
+    }
+
+    // ── money coming in ─────────────────────────────────────────────────────
+
+    /**
+     * The list and the settings line. Whether the app may read notifications
+     * is asked of the system only when the screen comes back: it can only
+     * change in the system's own settings.
+     */
+    private fun refreshIncome(access: Boolean = incomeWatch.access) {
+        incomes = BankNotices.waiting(ctx)
+        incomeWatch = IncomeWatchView(
+            on = BankNotices.isOn(ctx),
+            access = access,
+            last = BankNotices.lastLine(ctx, now.toLocalDateTime(zone).date),
+        )
+    }
+
+    /**
+     * On or off. True when the screen should open the phone's page for
+     * reading notifications - on, and not allowed yet. The switch stays on
+     * either way, and the settings screen says what is missing until it is not.
+     */
+    fun setIncomeWatch(on: Boolean): Boolean {
+        // Pressing เปิด again changes nothing here, and still opens the page
+        // when the phone has not said yes yet.
+        if (on != BankNotices.isOn(ctx)) BankNotices.setOn(ctx, on)
+        val access = BankNotices.hasAccess(ctx)
+        refreshIncome(access)
+        return on && !access
+    }
+
+    /** The one press, from the money tab. Saying what was saved, as the form does. */
+    fun saveIncome(p: PendingIncome) {
+        scope.launch {
+            val result = try {
+                BankNotices.save(ctx, p.id)
+            } catch (e: Exception) {
+                notice = Notice("บันทึกไม่ได้ " + (e.message ?: e.toString()))
+                return@launch
+            }
+            notice = when (result) {
+                BankNotices.Saved.Done -> Notice(incomeSaid(p))
+                BankNotices.Saved.Gone -> null
+                BankNotices.Saved.NeedsLook -> Notice("เงินเข้านี้ต้องเปิดเช็คก่อนบันทึก")
+                is BankNotices.Saved.Refused -> Notice("บันทึกไม่ได้ " + result.problems.joinToString(", "))
+            }
+            refreshIncome()
+            readMoney()
+            if (result == BankNotices.Saved.Done) quietSync()
+        }
+    }
+
+    /** "บันทึกแล้ว · เข้ากสิกรไทย +฿1": the row as the money tab will print it. */
+    private fun incomeSaid(p: PendingIncome): String {
+        val d = arrivalIncome(p.arrival)
+        val line = moneyLine(true, d.source, d.note, "")
+        return "บันทึกแล้ว · " + line.title + " " + moneyText(p.arrival.amount, d.currency ?: CURRENCY_FALLBACK, 1)
+    }
+
+    /** Not a row. Undoable from the notice, because a thumb on a list misses. */
+    fun dismissIncome(p: PendingIncome) {
+        BankNotices.dismiss(ctx, p.id)
+        refreshIncome()
+        notice = Notice(
+            text = "ไม่บันทึกเงินเข้านี้",
+            action = "เอาคืน",
+            onAction = {
+                BankNotices.restore(ctx, p.id)
+                refreshIncome()
             },
         )
     }

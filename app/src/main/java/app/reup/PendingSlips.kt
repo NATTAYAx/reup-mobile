@@ -170,6 +170,8 @@ object PendingSlips {
         val array = JSONArray()
         for (s in slips) array.put(toJson(s))
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
+        // The widget counts what is waiting.
+        ReupWidget.redraw(ctx)
     }
 
     private fun toJson(s: PendingSlip): JSONObject {

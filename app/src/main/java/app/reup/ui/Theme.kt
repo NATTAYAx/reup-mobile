@@ -165,6 +165,8 @@ object ReupType {
     val calmBody = Base.copy(fontSize = 15.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal)
     val banner = Base.copy(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal)
     val mono = TextStyle(fontFamily = PlexMono, fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
+    /** The time picker's big 04 : 00. Material's own size; only the face is ours. */
+    val clock = Base.copy(fontSize = 57.sp, lineHeight = 64.sp, fontWeight = FontWeight.Normal)
 }
 
 // ─── measurements ───────────────────────────────────────────────────────────
@@ -223,6 +225,11 @@ fun ReupTheme(colors: ReupColors, content: @Composable () -> Unit) {
         labelLarge = ReupType.button,
         labelMedium = ReupType.chip,
         headlineSmall = ReupType.calmTitle,
+        // The date picker's big "13 ต.ค. 2026" at its top and the time
+        // picker's 04 : 00. Left unset, they were the only lines in the app
+        // drawn in the system's font.
+        headlineLarge = ReupType.title,
+        displayLarge = ReupType.clock,
     )
     CompositionLocalProvider(LocalReupColors provides colors) {
         MaterialTheme(colorScheme = scheme, typography = type, content = content)

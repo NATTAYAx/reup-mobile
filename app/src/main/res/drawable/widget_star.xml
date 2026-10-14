@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The glint after the light has passed: a four-pointed star, drawn small. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:alpha="0.9"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,0C12.9,7.2 16.8,11.1 24,12C16.8,12.9 12.9,16.8 12,24C11.1,16.8 7.2,12.9 0,12C7.2,11.1 11.1,7.2 12,0Z" />
+</vector>

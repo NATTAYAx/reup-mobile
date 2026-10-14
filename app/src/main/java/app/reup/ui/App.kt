@@ -62,9 +62,25 @@ interface AppActions {
 
     /** Open a waiting slip in the money form, filled in. */
     fun editSlip(id: Long)
+
+    /** Show a waiting slip's picture whole, with its save, edit and don't-save. */
+    fun viewSlip(id: Long)
+
+    /** Open money in, read off a bank's notification, in the money form, filled in. */
+    fun editIncome(id: String)
+
+    /** The phone's own page for letting this app read notifications. */
+    fun openNotificationAccess()
+
+    /** The photo picker, for the widget's picture: one picture or clip, and nothing else. Answered through WidgetModel.picked. */
+    fun pickWidgetPicture()
+
+    /** Ask the home screen to take a widget, or say how to add one where it cannot be asked. */
+    fun placeWidget()
 }
 
-private enum class Tab { TODAY, MONEY, SETTINGS }
+/** The three tabs, in the bar's order. Public so the widget can ask for one. */
+enum class HomeTab { TODAY, MONEY, SETTINGS }
 
 /**
  * The app: three tabs and a bar, and one screen opened from a tab.
@@ -81,14 +97,22 @@ private enum class Tab { TODAY, MONEY, SETTINGS }
 fun ReupApp(model: HomeModel, actions: AppActions) {
     val colors = remember(model.themeId) { reupColors(paletteOf(model.themeId)) }
     ReupTheme(colors) {
-        var tab by rememberSaveable { mutableIntStateOf(Tab.TODAY.ordinal) }
+        var tab by rememberSaveable { mutableIntStateOf(HomeTab.TODAY.ordinal) }
         var diagnostics by rememberSaveable { mutableStateOf(false) }
         val snackbar = remember { SnackbarHostState() }
 
         // Back leaves the inner screen first, then returns to Today, then
         // leaves the app - the order a person expects from where they are.
         BackHandler(enabled = diagnostics) { diagnostics = false }
-        BackHandler(enabled = !diagnostics && tab != Tab.TODAY.ordinal) { tab = Tab.TODAY.ordinal }
+        BackHandler(enabled = !diagnostics && tab != HomeTab.TODAY.ordinal) { tab = HomeTab.TODAY.ordinal }
+
+        // A tab asked for from outside the screens: a tap on the widget.
+        val ask = model.tabAsk
+        LaunchedEffect(ask?.id) {
+            if (ask == null) return@LaunchedEffect
+            diagnostics = false
+            tab = ask.tab.ordinal
+        }
 
         val notice = model.notice
         LaunchedEffect(notice?.id) {
@@ -131,8 +155,8 @@ fun ReupApp(model: HomeModel, actions: AppActions) {
                                 label = "fab",
                             )
                             when (tab) {
-                                Tab.MONEY.ordinal -> MoneyScreen(model, actions, fabLift = lift)
-                                Tab.SETTINGS.ordinal -> SettingsScreen(model, actions, openDiagnostics = { diagnostics = true })
+                                HomeTab.MONEY.ordinal -> MoneyScreen(model, actions, fabLift = lift)
+                                HomeTab.SETTINGS.ordinal -> SettingsScreen(model, actions, openDiagnostics = { diagnostics = true })
                                 else -> TodayScreen(model, actions, fabLift = lift)
                             }
                         }
@@ -156,12 +180,20 @@ fun ReupApp(model: HomeModel, actions: AppActions) {
                     BottomBar(
                         items = listOf(
                             BarItem("วันนี้", R.drawable.ic_ring),
-                            BarItem("เงิน", R.drawable.ic_wallet),
+                            // A dot while something is waiting for a yes or a
+                            // no: money in has no notification of its own, the
+                            // bank's already said it, so this is where it shows.
+                            BarItem(
+                                "เงิน",
+                                R.drawable.ic_wallet,
+                                badge = model.slips.isNotEmpty() || model.incomes.isNotEmpty(),
+                                badgeColor = Reup.colors.accent,
+                            ),
                             BarItem("ตั้งค่า", R.drawable.ic_settings, badge = model.warnings.isNotEmpty()),
                         ),
                         selected = tab,
                         onSelect = { picked ->
-                            if (picked == Tab.MONEY.ordinal) model.loadMoney()
+                            if (picked == HomeTab.MONEY.ordinal) model.loadMoney()
                             tab = picked
                         },
                     )

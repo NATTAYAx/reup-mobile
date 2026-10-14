@@ -33,7 +33,8 @@
       NOT declared: FOREGROUND_SERVICE. Nothing runs in the background at all.
       The app is asleep between the moment it is closed and the moment the OS
       wakes it — for an alarm, or, when slips are switched on, for a picture a
-      bank's app has just saved (SlipWatch.kt).
+      bank's app has just saved (SlipWatch.kt), or, when money coming in is
+      switched on, for a bank's notification (BankNoticeListener.kt).
     -->
     <!--
       INTERNET is install-time and was not here until sync existed, which is
@@ -132,17 +133,24 @@
             android:label="ซิงก์กับคอม" />
 
         <!-- Adding a task. Not exported: nothing outside this app has any
-             business writing rows into it. -->
+             business writing rows into it. adjustResize for the same reason
+             as the money form: its save button rides on the keyboard. -->
         <activity
             android:name=".AddTaskActivity"
             android:exported="false"
-            android:label="เพิ่มงาน" />
+            android:label="เพิ่มงาน"
+            android:windowSoftInputMode="adjustResize" />
 
-        <!-- Money, both directions. Not exported, same as the rest. -->
+        <!--
+          Money, both directions. Not exported, same as the rest.
+          adjustResize so the keyboard's height reaches the screen as an inset:
+          the save button rides on top of the keyboard instead of under it.
+        -->
         <activity
             android:name=".AddMoneyActivity"
             android:exported="false"
-            android:label="บันทึกเงิน" />
+            android:label="บันทึกเงิน"
+            android:windowSoftInputMode="adjustResize" />
 
         <!--
           The one exported component in this app, and the only one that has to
@@ -193,6 +201,15 @@
             android:name=".ScanSlipActivity"
             android:exported="false" />
 
+        <!--
+          A waiting slip's picture, whole, opened from its row in the money tab
+          and from the form. Not exported, like every screen here that only
+          this app opens.
+        -->
+        <activity
+            android:name=".SlipPictureActivity"
+            android:exported="false" />
+
 
         <!--
           Not exported: nothing outside the app ever sends to this. The
@@ -231,6 +248,65 @@
             android:name=".SlipWatchJob"
             android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!--
+          Money coming in, read off K PLUS's and Krungthai NEXT's notifications.
+          Nothing reaches it until the person allows it on the phone's own
+          settings page. BIND_NOTIFICATION_LISTENER_SERVICE is a permission
+          only the system holds, and not exported is how Android's own
+          documentation declares a listener: the system binds it regardless,
+          and nothing else has any business to.
+
+          Android cannot be asked for two apps' notifications, only for kinds
+          of notification, so the filter asks for as few kinds as it can: the
+          ones that make a sound and the ones that do not, and never
+          conversations - nothing from LINE or any other chat app - or anything
+          ongoing. Listed as disabled, those two are shown switched off on the
+          settings page and cannot be switched on there by mistake. Everything
+          else that arrives is dropped on its package name, before anything
+          else about it is read (BankNoticeListener.kt).
+        -->
+        <service
+            android:name=".BankNoticeListener"
+            android:exported="false"
+            android:label="Reup · เงินเข้า"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.default_filter_types"
+                android:value="alerting|silent" />
+            <meta-data
+                android:name="android.service.notification.disabled_filter_types"
+                android:value="conversations|ongoing" />
+        </service>
+
+        <!--
+          The widget on the home screen (ReupWidget.kt). Not exported: what
+          sends to it is the system - adding, resizing, the clock or the zone
+          being changed - and this app's own alarm and redraws, and the system
+          reaches a receiver that is not exported. Nothing else has any
+          business making it draw.
+
+          The time, zone and language broadcasts are among the few the system
+          still delivers to a receiver named in a manifest, and each one moves
+          something the widget says: the date, which day "พรุ่งนี้" is.
+        -->
+        <receiver
+            android:name=".ReupWidget"
+            android:exported="false"
+            android:label="Reup วันนี้">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/reup_widget_info" />
+        </receiver>
 
         <!--
           Exported, because the sender is the system rather than this app. All

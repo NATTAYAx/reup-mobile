@@ -72,6 +72,7 @@ import kotlinx.datetime.TimeZone
 fun SettingsScreen(model: HomeModel, actions: AppActions, openDiagnostics: () -> Unit) {
     val c = Reup.colors
     val watch = model.slipWatch
+    val income = model.incomeWatch
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item(key = "head") { ScreenHeader(title = "ตั้งค่า", over = null) }
 
@@ -190,6 +191,44 @@ fun SettingsScreen(model: HomeModel, actions: AppActions, openDiagnostics: () ->
             }
         }
 
+        // The same shape as slips: this phone's question, never synced, and
+        // what is missing said only while it is missing. Reading notifications
+        // is allowed in the phone's settings and nowhere else, so the banner's
+        // button goes there.
+        item(key = "income-label") { SectionLabel("เงินเข้า Reup เอง") }
+        if (income.on && !income.access) {
+            item(key = "income-access") {
+                Banner(
+                    text = "ยังไม่ได้ให้ Reup อ่านแจ้งเตือน เงินเข้าจะยังไม่มา",
+                    tone = Tone.WARN,
+                    action = "อนุญาต",
+                    onAction = actions::openNotificationAccess,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+            }
+        }
+        item(key = "income") {
+            CardGroup {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)) {
+                    Segmented(
+                        options = listOf("ปิด", "เปิด"),
+                        selected = if (income.on) 1 else 0,
+                        onSelect = { i -> if (model.setIncomeWatch(i == 1)) actions.openNotificationAccess() },
+                    )
+                    Text(
+                        text = incomeWatchLine(income),
+                        style = ReupType.support,
+                        color = c.dim,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        }
+
+        // The widget is drawn in the theme below, so it sits above it.
+        item(key = "widget-label") { SectionLabel("วิดเจ็ต") }
+        item(key = "widget") { WidgetCard(model.widget, actions) }
+
         item(key = "theme-label") { SectionLabel("ธีม · " + paletteOf(model.themeId).name) }
         item(key = "themes") {
             CardGroup {
@@ -219,6 +258,9 @@ fun SettingsScreen(model: HomeModel, actions: AppActions, openDiagnostics: () ->
         }
     }
 
+    val frames = model.widget.frames
+    if (frames != null) FrameDialog(frames, model.widget)
+
     val choices = model.albumChoices
     if (choices != null) {
         AlbumDialog(
@@ -237,6 +279,14 @@ private fun slipWatchLine(w: SlipWatchView, model: HomeModel): String {
     val last = w.last ?: return "รอสลิปใบต่อไป อ่านเฉพาะรูปใหม่ในอัลบั้มที่เลือก"
     val at = Instant.fromEpochMilliseconds(last.second)
     return "ล่าสุด " + dayPhrase(at, model.now, model.zone) + " " + clockOf(at, model.zone) + " · " + last.first
+}
+
+/** What the money-in switch is doing, in one line. */
+private fun incomeWatchLine(w: IncomeWatchView): String = when {
+    !w.on -> "อ่านแจ้งเตือนเงินเข้าของ K PLUS กับ Krungthai NEXT มาเป็นรายการรอบันทึก ไม่อ่านแอปอื่น อ่านในเครื่อง ไม่ส่งไปไหน"
+    !w.access -> "รอสิทธิ์อ่านแจ้งเตือนจากหน้าตั้งค่าของเครื่อง"
+    w.last != null -> "ล่าสุด " + w.last
+    else -> "รอเงินเข้าครั้งต่อไป เงินที่โอนระหว่างบัญชีตัวเองจะไม่ขึ้น"
 }
 
 /**

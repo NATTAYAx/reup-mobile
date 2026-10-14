@@ -235,6 +235,42 @@ private fun insideQuiet(at: Instant, w: QuietWindow, zone: TimeZone): Boolean {
     return if (w.wraps) minute >= w.startMin || minute < w.endMin
     else minute >= w.startMin && minute < w.endMin
 }
+
+/**
+ * Whether it is quiet hours at [at]: what the moon on the widget says.
+ *
+ * Through the same window the queue is built with, so the moon is up exactly
+ * while an alarm would arrive without a sound. False when there are none,
+ * including equal bounds, which [quietWindow] already reads as off.
+ */
+fun inQuiet(at: Instant, quiet: QuietHours?, zone: TimeZone): Boolean {
+    val w = quiet?.let(::quietWindow) ?: return false
+    return insideQuiet(at, w, zone)
+}
+
+/**
+ * The next moment quiet hours start or end, after [now]; null when there are
+ * none. When the widget's moon has to rise or set, and so when it is drawn
+ * again.
+ *
+ * Today's two edges and tomorrow's, the first of the four still ahead. Walked
+ * on the wall clock rather than by adding hours, so a day that is not 24 hours
+ * long somewhere still puts the edge at the minute the window names.
+ */
+fun nextQuietEdge(now: Instant, quiet: QuietHours?, zone: TimeZone): Instant? {
+    val w = quiet?.let(::quietWindow) ?: return null
+    val today = wallClock(now.toEpochMilliseconds(), zone)
+    var soonest: Instant? = null
+    for (days in 0..1) {
+        val day = addDays(today, days)
+        for (minute in listOf(w.startMin, w.endMin)) {
+            val at = Instant.fromEpochMilliseconds(wallToEpochMs(atTime(day, minute / 60, minute % 60), zone))
+            if (at > now && (soonest == null || at < soonest)) soonest = at
+        }
+    }
+    return soonest
+}
+
 // ── this device ──────────────────────────────────────────────────────────────
 
 /**

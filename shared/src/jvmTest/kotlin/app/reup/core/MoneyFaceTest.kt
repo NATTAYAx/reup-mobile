@@ -94,6 +94,29 @@ class MoneyFaceTest {
     }
 
     @Test
+    fun `the amount box takes digits and one point, and nothing else`() {
+        assertEquals("", typedAmount(""))
+        assertEquals("45", typedAmount("45"))
+        assertEquals("60.5", typedAmount("60.5"))
+        assertEquals(".", typedAmount("."), "how 0.5 starts being typed")
+        assertEquals("12.", typedAmount("12."))
+        // Grouping is taken out, not refused.
+        assertEquals("1200.50", typedAmount("1,200.50"))
+        assertEquals("1200", typedAmount("1 200"))
+        assertEquals("1200", typedAmount(" 1200\n"))
+        // Refused, so the box keeps what it had.
+        assertEquals(null, typedAmount("12.5.6"))
+        assertEquals(null, typedAmount("12a"))
+        assertEquals(null, typedAmount("-5"))
+        assertEquals(null, typedAmount("฿45"))
+        assertEquals(null, typedAmount("๔๕"), "Thai digits are not what the books are written in")
+        assertEquals(null, typedAmount("1.23456"))
+        assertEquals("1.2345", typedAmount("1.2345"))
+        assertEquals(null, typedAmount("1234567890123"))
+        assertEquals("123456789012", typedAmount("123456789012"))
+    }
+
+    @Test
     fun `the month above the title`() {
         assertEquals("ตุลาคม", monthName(10))
         assertEquals("มกราคม", monthName(1))

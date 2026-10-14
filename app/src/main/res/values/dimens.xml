@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The widget's corners. Before Android 12 every home screen draws its own
+      widgets' corners, or does not, so these are the app's own guess; from
+      Android 12 they are the phone's (values-v31), so the card matches the
+      clock and the weather beside it.
+    -->
+    <dimen name="widget_radius">20dp</dimen>
+    <dimen name="widget_inner_radius">12dp</dimen>
+</resources>

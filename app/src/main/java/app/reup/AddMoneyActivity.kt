@@ -1,33 +1,22 @@
 package app.reup
 
-import android.app.Activity
-import android.app.AlertDialog
 import android.graphics.Color
-import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.text.InputType
-import android.util.TypedValue
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
-import app.reup.core.expenseLabel
-import app.reup.sync.Category
-import app.reup.sync.ExpenseDraft
-import app.reup.sync.IncomeDraft
-import app.reup.sync.CURRENCY_FALLBACK
-import app.reup.sync.MoneyEntry
-import app.reup.sync.MoneySummary
-import app.reup.sync.expenseProblems
-import app.reup.sync.incomeProblems
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import app.reup.core.paletteOf
+import app.reup.ui.MoneyFormModel
+import app.reup.ui.MoneyFormScreen
+import app.reup.ui.MoneyFormStart
+import app.reup.ui.ReupTheme
+import app.reup.ui.reupColors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 /**
  * Money, written down where it happens.
@@ -36,40 +25,47 @@ import java.time.LocalDate
  * — and the machine it was being recorded on is at a desk. Everything about
  * that gap is why the numbers in the app have never quite been the numbers.
  *
+ * WHAT THIS CLASS IS NOW
+ * ----------------------
+ * A host, like MainActivity. The form is MoneyFormScreen, drawn from
+ * MoneyFormModel, in the same pieces as the money tab; this class reads what it
+ * was opened with, owns the lifecycle, and opens the slip's picture. It used to
+ * be nine hundred lines of views built by hand, with the day typed into a box
+ * as 2026-10-13 and the last entries printed as "08/14 food -60 THB".
+ *
  * WHY BOTH DIRECTIONS ARE ONE SCREEN
  * ----------------------------------
  * They differ in two controls. Spending has category chips read from the
  * database; a payment has a box for the name on it. Everything else — the
  * amount, the unit beside it, the note, the date, every sentence the validator
- * can say — is the same, because the shared layer answers the same three
- * questions for both and returns the same codes.
- *
- * A second activity would be a copy of all of that on the one module where
- * nothing can be tested, which is the worst place to keep two of something. The
- * add and edit forms for tasks are one screen for the same reason.
+ * can say — is the same, because the shared layer answers the same questions
+ * for both and returns the same codes. The add and edit forms for tasks are
+ * one screen for the same reason.
  *
  * WHY THE CURRENCY IS ON SCREEN AND NOT ASSUMED
  * ---------------------------------------------
  * A number filed in the wrong unit is not visibly wrong anywhere. It is not a
  * red row or a failed save; it is simply in the wrong total, and every screen
- * that reads that total filters by unit and quietly leaves it out. money.ts
- * spends a page on this and the desktop still had to grow a "which currencies
- * are actually in your books" screen to make it findable.
- *
- * So the unit is printed next to the amount box, always, and where it came from
- * is printed under it. A person who sees THB when they meant USD can see it
- * before pressing anything.
+ * that reads that total filters by unit and quietly leaves it out. So the unit
+ * is printed next to the amount, always, and why it might be wrong is printed
+ * under it. A person who sees THB when they meant USD can see it before
+ * pressing anything.
  *
  * WHY THE LAST FEW ENTRIES ARE ON THIS SCREEN
- * ------------------------------------------
- * The line at the top says how much has gone this month, and a total is the one
- * thing a total cannot tell you: whether the coffee at eleven went in twice. Two
- * identical rows move it by exactly what one row for twice the price would.
+ * -------------------------------------------
+ * A total cannot say whether the coffee at eleven went in twice: two identical
+ * rows move it by exactly what one row for twice the price would. So the last
+ * few are under the form, to look at before saving one more.
  *
- * It is also the receipt. Until now this screen closed itself on a successful
- * save, so the only difference between a row landing and the app falling over
- * was that both ended with the screen gone. Now the top line moves and the row
- * appears at the head of the list — two confirmations that do not share a cause.
+ * WHY A SAVE GOES BACK, AND SAYS SO
+ * ---------------------------------
+ * Closing on success once looked exactly like a crash: the only sign a row had
+ * landed was the screen being gone. So the form stayed, emptied for the next
+ * row - and on the phone that looked like the form starting over, as if the
+ * save were the one thing that had not happened. Now it goes back, and what
+ * was saved is said where it lands: along the bottom of the money tab, which
+ * has the new row at the head of its list, or as a toast when the form was
+ * opened from a notification or the slip reader.
  *
  * WHY IT DOES NOT REFUSE WHEN THERE IS NO SETTING YET
  * ---------------------------------------------------
@@ -79,175 +75,34 @@ import java.time.LocalDate
  * the same value money.ts falls back to and says so on screen, which keeps the
  * number and makes the assumption visible instead of silent.
  */
-class AddMoneyActivity : Activity() {
-
-    private lateinit var amountBox: EditText
-    private lateinit var sourceBox: EditText
-    private lateinit var noteBox: EditText
-    private lateinit var dateBox: EditText
-    private lateinit var unitLabel: TextView
-    private lateinit var unitNote: TextView
-    private lateinit var categoryLabel: TextView
-    private lateinit var sourceLabel: TextView
-    private lateinit var categoryRow: LinearLayout
-    private lateinit var directionRow: LinearLayout
-    private lateinit var outButton: Button
-    private lateinit var inButton: Button
-    private lateinit var saveButton: Button
-    private lateinit var cancelButton: Button
-    private lateinit var status: TextView
-    private lateinit var titleView: TextView
-    private lateinit var monthLine: TextView
-    private lateinit var recentLabel: TextView
-    private lateinit var recentHint: TextView
-    private lateinit var recentBox: LinearLayout
-
-    private val chips = mutableListOf<Button>()
-    private var categories: List<Category> = emptyList()
-    private var recent: List<MoneyEntry> = emptyList()
-    /** The row being rewritten, or null when this is a new one. */
-    private var editing: MoneyEntry? = null
-
-    /**
-     * Opened from the money tab to change one row, rather than to write new
-     * ones. Saving or cancelling then goes back to that tab instead of leaving
-     * an empty form to fill in, which is not what anybody came here for.
-     */
-    private var editOnly = false
-    private var category = "other"
-    private var currency = CURRENCY_FALLBACK
-    private var currencyKnown = false
-
-    /**
-     * The unit a slip was printed in, when this screen was opened from one.
-     *
-     * It wins over the phone's own currency for the row being written, because
-     * the slip is what the row is a copy of: a receipt in dollars filed under
-     * baht is wrong by a factor nobody sees. [storedCurrency] is kept beside it
-     * only so the screen can say when the two differ.
-     */
-    private var slipCurrency: String? = null
-    private var storedCurrency: String? = null
-
-    /** The slip named money several currencies share, and the unit is a guess. */
-    private var slipUnsure = false
-
-    /**
-     * The reference of the slip this form was filled in from, written to
-     * slip_ref with the row. Its unique index is what stops one slip becoming
-     * two rows — scanned by hand and also saved from the shade, say.
-     */
-    private var slipRef: String? = null
-
-    /** The waiting slip this form came from, by gallery id; -1 when none. */
-    private var slipId = -1L
-    private var incoming = false
-    private var busy = false
-    private var blocked = false
+class AddMoneyActivity : ComponentActivity() {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private lateinit var model: MoneyFormModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Before any view exists: everything below reads its colours out of
-        // Ui, and a screen that repaints into a different theme a moment
-        // after opening is worse than one with no choice at all.
+        // Before anything is drawn, so the window behind the first frame is
+        // already the page colour and the theme is the one picked.
         Ui.load(this)
-        incoming = intent.getBooleanExtra(EXTRA_INCOMING, false)
+        window.setBackgroundDrawable(ColorDrawable(Ui.BG))
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
+        model = MoneyFormModel(applicationContext, scope, opened(), done = { finishSaying(it) })
+        val colors = reupColors(paletteOf(Ui.themeId(this)))
+        setContent {
+            ReupTheme(colors) {
+                MoneyFormScreen(model, onBack = ::finish, onPicture = ::showPicture)
+            }
+        }
+        model.load()
+    }
 
-        amountBox = field("จำนวนเงิน", InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        sourceBox = field("เช่น TELUS", 0)
-        noteBox = field("รายละเอียด", 0)
-        dateBox = field("วันที่", 0)
-        dateBox.setText(LocalDate.now().toString())
-
-        // Filled in by whoever opened this screen: the slip reader, or a slip
-        // that arrived on its own and needed a look. Either way it hands over a
-        // reading rather than writing a row, because a row is written when a
-        // person presses save with the numbers in front of them. A slip that
-        // saved itself would be a way in holding numbers a recogniser guessed
-        // at, which is the one kind of row nobody would think to check.
-        //
-        // There are two save buttons now, this one and the one on the
-        // notification of a slip with nothing left to check (PendingSlips.save).
-        // Both are a person pressing save on a reading they can see, and both go
-        // through the same repository call with the same validation — so it is
-        // still one gate, with a second door handle.
-        intent.getStringExtra(EXTRA_AMOUNT)?.let { if (it.isNotBlank()) amountBox.setText(it) }
-        intent.getStringExtra(EXTRA_DATE)?.let { if (it.isNotBlank()) dateBox.setText(it) }
-        intent.getStringExtra(EXTRA_NOTE)?.let { if (it.isNotBlank()) noteBox.setText(it) }
-        slipCurrency = intent.getStringExtra(EXTRA_CURRENCY)?.trim()?.uppercase()
-            ?.takeIf { c -> c.length == 3 && c.all { it in 'A'..'Z' } }
-        slipUnsure = intent.getBooleanExtra(EXTRA_CURRENCY_UNSURE, false)
-        slipRef = intent.getStringExtra(EXTRA_SLIP_REF)?.trim()?.takeIf { it.isNotEmpty() }
-        slipId = intent.getLongExtra(EXTRA_SLIP_ID, -1L)
-
-        unitLabel = label("")
-        unitNote = note("")
-        categoryLabel = label("หมวด")
-        sourceLabel = label("ได้รับจาก")
-
-        outButton = Ui.chip(this, "จ่ายออก") { setDirection(false) }
-        inButton = Ui.chip(this, "รับเข้า") { setDirection(true) }
-
-        directionRow = LinearLayout(this)
-        directionRow.orientation = LinearLayout.HORIZONTAL
-        directionRow.addView(outButton, Ui.cell(this, true))
-        directionRow.addView(inButton, Ui.cell(this))
-
-        categoryRow = LinearLayout(this)
-        categoryRow.orientation = LinearLayout.VERTICAL
-
-        saveButton = Ui.primary(this, "บันทึก") { save() }
-        cancelButton = Ui.secondary(this, CANCEL_EDIT) { cancelEdit() }
-
-        monthLine = note("")
-        recentLabel = label(RECENT_TITLE)
-        recentHint = note(RECENT_HINT)
-        recentBox = LinearLayout(this)
-        recentBox.orientation = LinearLayout.VERTICAL
-
-        status = Ui.status(this)
-        // Why a slip that arrived on its own could not be saved from the shade,
-        // where the box it is about is a few centimetres below.
-        intent.getStringExtra(EXTRA_SLIP_CHECK)?.let { status.text = it }
-
-        val screen = Ui.sticky(this)
-        val column = screen.column
-
-        // The manifest has said android:label on this activity since the day it
-        // was written, and render() computes four different titles. Under
-        // Theme.Material.NoActionBar nothing has ever drawn either of them.
-        val head = Ui.header(this, "")
-        titleView = head.getChildAt(0) as TextView
-        column.addView(head, Ui.row(this, 0f))
-        // Above everything, because the useful thing to know while deciding
-        // whether to buy something is what has already gone this month.
-        column.addView(monthLine, rowParams())
-        column.addView(directionRow, rowParams())
-        column.addView(unitLabel, rowParams())
-        column.addView(amountBox, rowParams())
-        column.addView(unitNote, rowParams())
-        column.addView(categoryLabel, rowParams())
-        column.addView(categoryRow, rowParams())
-        column.addView(sourceLabel, rowParams())
-        column.addView(sourceBox, rowParams())
-        column.addView(noteBox, rowParams())
-        column.addView(label("วันที่"), rowParams())
-        column.addView(dateBox, rowParams())
-        column.addView(status, rowParams())
-        column.addView(recentLabel, rowParams())
-        column.addView(recentHint, rowParams())
-        column.addView(recentBox, rowParams())
-
-        // The one thing this screen is for, pinned where a thumb reaches and
-        // where a form that grows cannot push it off the bottom of the glass.
-        screen.bar.addView(cancelButton, Ui.cell(this, true))
-        screen.bar.addView(saveButton, Ui.cell(this))
-        setContentView(screen.root)
-
-        render()
-        load()
+    override fun onResume() {
+        super.onResume()
+        model.resume()
     }
 
     override fun onDestroy() {
@@ -255,545 +110,39 @@ class AddMoneyActivity : Activity() {
         super.onDestroy()
     }
 
-    private fun setDirection(value: Boolean) {
-        incoming = value
-        // Cleared rather than kept. The old message was about the form as it
-        // was a moment ago, and a complaint left over from the other direction
-        // reads as a complaint about this one.
-        status.text = ""
-        render()
+    /** The slip's picture, whole. No answers on it: the answers are this form. */
+    private fun showPicture(id: Long) {
+        startActivity(SlipPictureActivity.intent(this, id, answers = false))
     }
 
     /**
-     * The categories and the unit, both from the database rather than from a
-     * list in this file.
+     * What whoever opened this asked for: the slip reader, a slip that arrived
+     * on its own, money in off a bank's notification, or a row on the money
+     * tab.
      *
-     * A hardcoded set of categories here would be a second answer to a question
-     * the desktop already answers, and the two would disagree the first time
-     * one was renamed. An empty table is not a failure either — it is what a
-     * phone looks like before its first sync, and everything files under
-     * `other`, which is the behaviour rather than a bug.
+     * A reading is handed over rather than written, because a row is written
+     * when a person presses save with the numbers in front of them. A slip that
+     * saved itself would be a way in for numbers a recogniser guessed at, which
+     * is the one kind of row nobody would think to check. The save button on a
+     * slip with nothing left to check (PendingSlips.save) is the same gate with
+     * a second door handle: a person pressing save on a reading they can see,
+     * through the same repository call and the same validation.
      */
-    private fun load() {
-        busy = true
-        render()
-        val wanted = intent.getStringExtra(EXTRA_EDIT_UID)
-        scope.launch {
-            var target: MoneyEntry? = null
-            try {
-                val repo = Repo.money(this@AddMoneyActivity)
-                categories = repo.categories()
-                category = categories.firstOrNull()?.key ?: "other"
-                // The category a slip's memo named, when it is one of these.
-                intent.getStringExtra(EXTRA_CATEGORY)?.let { k -> if (categories.any { it.key == k }) category = k }
-                val stored = repo.currency()
-                storedCurrency = stored
-                currencyKnown = slipCurrency != null || stored != null
-                currency = slipCurrency ?: stored ?: CURRENCY_FALLBACK
-                buildChips()
-                refresh(repo)
-                // The list the tab drew from is the same twenty rows, so the
-                // one that was tapped is in it.
-                target = wanted?.let { uid -> recent.firstOrNull { it.uid == uid } }
-            } catch (e: Exception) {
-                status.text = "เปิดฐานข้อมูลไม่ได้ ${e.message ?: e.toString()}"
-                blocked = true
-            } finally {
-                busy = false
-                render()
-            }
-            target?.let {
-                editOnly = true
-                startEdit(it)
-            }
-        }
-    }
-
-    /**
-     * The month so far, in one line.
-     *
-     * Whole units, no decimals: this is a glance while standing up, and the
-     * satang have never been the part that decides anything.
-     *
-     * The count of rows in other units is printed rather than dropped. A screen
-     * that filters by currency in silence is how a confident, wrong-looking
-     * zero happens — the desktop needed a whole extra panel to make that
-     * findable after the fact.
-     */
-    private fun showMonth(m: MoneySummary) {
-        val out = m.spent.toLong()
-        val income = m.received.toLong()
-        val line = StringBuilder("เดือนนี้  จ่าย $out  รับ $income  $currency")
-        // Not "look on the computer" any more. The list below does not filter by
-        // unit, so the rows this total left out are a few centimetres away.
-        if (m.otherRows > 0) line.append("\n(อีก ${m.otherRows} รายการเป็นสกุลอื่น อยู่ในรายการข้างล่าง)")
-        monthLine.text = line.toString()
-    }
-
-    /**
-     * The two reads that answer "how is the month" and "what did I write down",
-     * always together.
-     *
-     * One call site rather than two, because a screen where the total has moved
-     * and the list has not is a screen saying two different things about the
-     * same save.
-     */
-    private suspend fun refresh(repo: app.reup.sync.MoneyRepo) {
-        val today = LocalDate.now().toString()
-        showMonth(repo.summary(today.substring(0, 7), currency))
-        recent = repo.recent()
-        showRecent(today)
-    }
-
-    /**
-     * The last twenty entries, newest first.
-     *
-     * Each row prints its own unit, which is why this list is allowed not to
-     * filter by one: nothing here is being added together. The totals above have
-     * to filter, and this is where what they filtered out becomes visible rather
-     * than merely counted.
-     *
-     * The category is looked up in the table the chips came from, so a renamed
-     * label reads the same in both places, and one that is not there any more
-     * falls back to the key rather than to nothing — a row filed under a
-     * category that has since been deleted is still a row that happened.
-     */
-    private fun showRecent(today: String) {
-        recentBox.removeAllViews()
-        if (recent.isEmpty()) {
-            // Synced or not is the stored setting's question. A unit read off a
-            // slip says nothing about whether this phone has met the computer.
-            recentBox.addView(note(if (storedCurrency != null) NO_ENTRIES else NO_ENTRIES_YET), rowParams())
-            return
-        }
-        for (e in recent) {
-            val row = LinearLayout(this)
-            row.orientation = LinearLayout.HORIZONTAL
-
-            val left = Ui.note(this, dayOf(e.date, today) + "  " + nameOf(e))
-            left.maxLines = 1
-            left.ellipsize = android.text.TextUtils.TruncateAt.END
-
-            // The sign carries the direction on its own; the colour only agrees
-            // with it, so nothing is lost reading this in sunlight.
-            val sign = if (e.incoming) "+" else "-"
-            val right = Ui.mono(this, sign + e.amount.toLong() + " " + e.currency)
-            right.setTextColor(if (e.incoming) Ui.POSITIVE else Ui.TEXT)
-
-            val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            row.addView(left, lp)
-            row.addView(
-                right,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ),
-            )
-            // Long press rather than a delete button on every line. A button
-            // sitting next to twenty amounts is twenty chances to remove the
-            // wrong one with a thumb, and removing a row is not the thing this
-            // screen is for.
-            row.setOnLongClickListener { rowMenu(e); true }
-            // Room to press, and a line under each one: twenty amounts with
-            // nothing between them is a block of text, not a list.
-            row.setPadding(Ui.dp(this, 2f), Ui.dp(this, 9f), Ui.dp(this, 2f), Ui.dp(this, 9f))
-            recentBox.addView(row, Ui.row(this, 0f))
-            recentBox.addView(
-                Ui.divider(this),
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    Ui.dp(this, 1f),
-                ),
-            )
-        }
-    }
-
-    /** `2026-08-20` as something short, and as a word when it is today. */
-    private fun dayOf(date: String, today: String): String =
-        if (date == today) TODAY else if (date.length >= 10) date.substring(5).replace('-', '/') else date
-
-    /** What the row is about: the category going out, the name coming in. */
-    private fun nameOf(e: MoneyEntry): String {
-        // Named memo rather than note: this file already has a note() for the
-        // field and a note() for a grey label, and a local that shadows both is
-        // one edit away from an error nobody expects.
-        val memo = e.note?.trim().orEmpty()
-        if (e.incoming) {
-            val from = e.tag?.trim().orEmpty()
-            return listOf(from, memo).filter { it.isNotEmpty() }.joinToString("  ").ifEmpty { INCOMING }
-        }
-        val c = categories.firstOrNull { it.key == e.tag }
-        val label = c?.let { it.emoji + " " + expenseLabel(it.key, it.label) } ?: (e.tag ?: "")
-        return listOf(label, memo).filter { it.isNotEmpty() }.joinToString("  ").ifEmpty { OUTGOING }
-    }
-
-    /**
-     * Asks before removing, and says which row it means.
-     *
-     * The dialog repeats the amount and the name because the row that was
-     * pressed and the row being described have to be the same one, and a thumb
-     * on a list of twenty short lines is not evidence of that. Naming it is what
-     * turns a mis-press into a cancel rather than into a number that is gone.
-     *
-     * There is no undo behind this. What there is instead is the desktop: the
-     * row is tombstoned rather than removed, so it is still there to be looked
-     * at on a bigger screen, and building an undo here would be a second way of
-     * putting a row back that only one of the two machines knows about.
-     */
-    /**
-     * Two things can be done to a row, and neither is what this screen is for.
-     *
-     * Behind a long press rather than on the row, because buttons sitting next
-     * to twenty amounts are twenty chances to hit the wrong one with a thumb.
-     */
-    private fun rowMenu(e: MoneyEntry) {
-        if (busy || blocked) return
-        AlertDialog.Builder(this)
-            .setTitle(nameOf(e))
-            .setItems(arrayOf(MENU_EDIT, MENU_DELETE)) { _, which ->
-                if (which == 0) startEdit(e) else confirmDelete(e)
-            }
-            .show()
-    }
-
-    /**
-     * Puts a row back into the form.
-     *
-     * Everything the form needs is already in hand: the list carries the amount,
-     * the unit, the date, the note and either the category or the name on the
-     * payment. Reading the row again would be a second answer to what the row
-     * says, and the one on screen is the one that was pressed.
-     *
-     * The unit comes from the row rather than from the setting, because the row
-     * is what is being rewritten. Editing a dollar row on a phone counting in
-     * baht should not quietly refile it.
-     */
-    private fun startEdit(e: MoneyEntry) {
-        editing = e
-        incoming = e.incoming
-        currency = e.currency
-        currencyKnown = true
-        amountBox.setText(trimZero(e.amount))
-        noteBox.setText(e.note ?: "")
-        dateBox.setText(e.date)
-        if (e.incoming) sourceBox.setText(e.tag ?: "")
-        else category = if (categories.any { it.key == e.tag }) e.tag!! else category
-        status.text = EDITING
-        render()
-        amountBox.requestFocus()
-    }
-
-    /** Back to writing a new row, leaving the old one exactly as it was. */
-    private fun cancelEdit() {
-        if (editOnly) {
-            finish()
-            return
-        }
-        editing = null
-        amountBox.setText("")
-        noteBox.setText("")
-        sourceBox.setText("")
-        dateBox.setText(LocalDate.now().toString())
-        status.text = ""
-        scope.launch {
-            try {
-                val repo = Repo.money(this@AddMoneyActivity)
-                val stored = repo.currency()
-                storedCurrency = stored
-                currencyKnown = stored != null
-                currency = stored ?: CURRENCY_FALLBACK
-            } catch (_: Exception) {
-                // The unit on screen is one the row itself carried, so leaving
-                // it is no worse than guessing, and this is not the moment to
-                // put an error in front of somebody who pressed cancel.
-            }
-            render()
-        }
-    }
-
-    /** `60.0` as `60`, because that is what was typed in. */
-    private fun trimZero(v: Double): String =
-        if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
-
-    private fun confirmDelete(e: MoneyEntry) {
-        if (busy || blocked) return
-        val sign = if (e.incoming) "+" else "-"
-        AlertDialog.Builder(this)
-            .setTitle(DELETE_TITLE)
-            .setMessage("${nameOf(e)}\n$sign${e.amount.toLong()} ${e.currency}")
-            .setNegativeButton(DELETE_NO, null)
-            .setPositiveButton(DELETE_YES) { _, _ -> doDelete(e) }
-            .show()
-    }
-
-    /**
-     * A tombstone, which is what the desktop writes too.
-     *
-     * The list is not edited in place afterwards, it is read again. A screen
-     * that removes the line itself is a screen that has decided the write
-     * succeeded before anything told it so, and this is the one action here
-     * where being wrong about that means a number nobody can see any more.
-     */
-    private fun doDelete(e: MoneyEntry) {
-        busy = true
-        render()
-        scope.launch {
-            try {
-                val repo = Repo.money(this@AddMoneyActivity)
-                repo.delete(e)
-                status.text = DELETED
-                refresh(repo)
-            } catch (x: Exception) {
-                status.text = "\u0e25\u0e1a\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49 ${x.message ?: x.toString()}"
-            } finally {
-                busy = false
-                render()
-            }
-        }
-    }
-
-    private fun buildChips() {
-        categoryRow.removeAllViews()
-        chips.clear()
-        if (categories.isEmpty()) {
-            categoryRow.addView(note(NO_CATEGORIES), rowParams())
-            return
-        }
-        var row = newChipRow()
-        for ((i, c) in categories.withIndex()) {
-            if (i % 3 == 0 && i > 0) {
-                categoryRow.addView(row, rowParams())
-                row = newChipRow()
-            }
-            val b = Ui.chip(this, c.emoji + " " + expenseLabel(c.key, c.label)) {
-                category = c.key
-                render()
-            }
-            b.tag = c.key
-            chips.add(b)
-            row.addView(b, Ui.cell(this, i % 3 == 0, 6f))
-        }
-        categoryRow.addView(row, rowParams())
-    }
-
-    private fun newChipRow(): LinearLayout {
-        val r = LinearLayout(this)
-        r.orientation = LinearLayout.HORIZONTAL
-        return r
-    }
-
-    /**
-     * Everything that changes on screen, in one place, after every change.
-     *
-     * Rows are hidden rather than disabled: a control that does not apply to
-     * the direction chosen is not temporarily unavailable, it has no meaning,
-     * and leaving it visible-but-grey invites filling it in and wondering why
-     * nothing happened.
-     */
-    private fun render() {
-        val edit = editing != null
-        title = when {
-            edit && incoming -> "\u0e41\u0e01\u0e49\u0e23\u0e32\u0e22\u0e23\u0e31\u0e1a"
-            edit -> "\u0e41\u0e01\u0e49\u0e23\u0e32\u0e22\u0e08\u0e48\u0e32\u0e22"
-            incoming -> "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e23\u0e32\u0e22\u0e23\u0e31\u0e1a"
-            else -> "\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e23\u0e32\u0e22\u0e08\u0e48\u0e32\u0e22"
-        }
-
-        // The direction cannot be flipped mid-edit. A row lives in one table or
-        // the other, and moving it between them is a delete and a new row, not
-        // an edit — doing it silently would leave the old one behind.
-        outButton.isEnabled = !edit
-        inButton.isEnabled = !edit
-        cancelButton.visibility =
-            if (edit) android.view.View.VISIBLE else android.view.View.GONE
-
-        titleView.text = title
-        // Selection used to be alpha 0.55 and bold, which on a grey slab in the
-        // dark reads as "unavailable" rather than "not this one".
-        Ui.select(this, outButton, !incoming)
-        Ui.select(this, inButton, incoming)
-
-        unitLabel.text = "จำนวนเงิน ($currency)"
-        val fromSlip = !edit && slipCurrency != null && currency == slipCurrency
-        val unitText = when {
-            fromSlip && storedCurrency != null && storedCurrency != currency ->
-                "สกุลเงินตามสลิป ไม่ใช่ $storedCurrency ที่ใช้ปกติ เช็คก่อนบันทึก"
-            !edit && slipUnsure ->
-                "สลิปใช้สัญลักษณ์เงินที่หลายประเทศใช้ร่วมกัน บอกไม่ได้ว่าเป็น $currency จริงไหม เช็คก่อนบันทึก"
-            !currencyKnown -> UNIT_GUESSED
-            else -> ""
-        }
-        unitNote.text = unitText
-        unitNote.visibility = if (unitText.isEmpty()) TextView.GONE else TextView.VISIBLE
-
-        val show = { v: android.view.View, on: Boolean ->
-            v.visibility = if (on) android.view.View.VISIBLE else android.view.View.GONE
-        }
-        show(categoryLabel, !incoming)
-        show(categoryRow, !incoming)
-        show(sourceLabel, incoming)
-        show(sourceBox, incoming)
-
-        for (b in chips) Ui.select(this, b, b.tag == category)
-
-        saveButton.isEnabled = !busy && !blocked
-        saveButton.text = when {
-            busy -> "กำลังบันทึก"
-            edit -> "บันทึกการแก้"
-            else -> "บันทึก"
-        }
-    }
-
-    private fun amount() = amountBox.text.toString().trim()
-    private fun note() = noteBox.text.toString().trim()
-    private fun date() = dateBox.text.toString().trim()
-
-    private fun expense() = ExpenseDraft(
-        amount = amount(),
-        currency = currency,
-        category = category,
-        note = note(),
-        date = date(),
-        // A new row only. An edit never moves a row onto a different slip; see
-        // EXPENSE_EDITABLE, which has no slip_ref for that reason.
-        slipRef = if (editing == null) slipRef else null,
+    private fun opened(): MoneyFormStart = MoneyFormStart(
+        incoming = intent.getBooleanExtra(EXTRA_INCOMING, false),
+        editUid = intent.getStringExtra(EXTRA_EDIT_UID),
+        amount = intent.getStringExtra(EXTRA_AMOUNT)?.trim()?.takeIf { it.isNotEmpty() },
+        date = intent.getStringExtra(EXTRA_DATE)?.trim()?.takeIf { it.isNotEmpty() },
+        note = intent.getStringExtra(EXTRA_NOTE)?.trim()?.takeIf { it.isNotEmpty() },
+        currency = intent.getStringExtra(EXTRA_CURRENCY)?.trim()?.uppercase()
+            ?.takeIf { c -> c.length == 3 && c.all { it in 'A'..'Z' } },
+        currencyUnsure = intent.getBooleanExtra(EXTRA_CURRENCY_UNSURE, false),
+        category = intent.getStringExtra(EXTRA_CATEGORY),
+        slipRef = intent.getStringExtra(EXTRA_SLIP_REF)?.trim()?.takeIf { it.isNotEmpty() },
+        slipId = intent.getLongExtra(EXTRA_SLIP_ID, -1L),
+        slipCheck = intent.getStringExtra(EXTRA_SLIP_CHECK)?.takeIf { it.isNotBlank() },
+        noticeId = intent.getStringExtra(EXTRA_NOTICE_ID)?.takeIf { it.isNotBlank() },
     )
-
-    private fun income() = IncomeDraft(
-        amount = amount(),
-        source = sourceBox.text.toString().trim(),
-        note = note(),
-        date = date(),
-        currency = currency,
-    )
-
-    private fun save() {
-        if (busy || blocked) return
-        val known = categories.map { it.key }
-
-        // Asked here as well as inside the repository, so the screen can say
-        // what is wrong without a round trip. The repository asks again because
-        // it is what actually writes, and a check that only exists in front of
-        // a screen is a check the next caller skips.
-        val problems =
-            if (incoming) incomeProblems(income()) else expenseProblems(expense(), known)
-        if (problems.isNotEmpty()) {
-            status.text = problems.joinToString("\n") { sentence(it) }
-            return
-        }
-
-        busy = true
-        render()
-        scope.launch {
-            try {
-                val repo = Repo.money(this@AddMoneyActivity)
-                val target = editing
-                // Asked before writing, so the answer is a sentence rather than
-                // the unique index refusing in words nobody can read.
-                val ref = slipRef
-                if (target == null && !incoming && ref != null && repo.slipRecorded(ref)) {
-                    status.text = SLIP_ALREADY
-                    forgetSlip()
-                    return@launch
-                }
-                val refused = when {
-                    target != null && incoming -> repo.editIncome(target.uid, income())
-                    target != null -> repo.editExpense(target.uid, expense(), known)
-                    incoming -> repo.addIncome(income())
-                    else -> repo.addExpense(expense(), known)
-                }
-                if (refused.isNotEmpty()) {
-                    status.text = refused.joinToString("\n") { sentence(it) }
-                    return@launch
-                }
-                // No queue to rebuild: money does not ring. It goes out on the
-                // next sync like any other row.
-                //
-                // And the screen stays. Closing on success meant the only sign a
-                // row had landed was the screen being gone, which is also what a
-                // crash looks like. Now the top line moves and the row appears at
-                // the head of the list underneath.
-                //
-                // Clearing the amount is the guard against a second press as
-                // well as a courtesy: the validator refuses an empty one, so the
-                // duplicate this screen could most easily produce cannot be
-                // produced by pressing the same button twice. The direction, the
-                // category and the date are kept, because the next thing written
-                // down at a counter is usually the same kind of thing.
-                val wasEdit = editing != null
-                // Whichever way it was saved, the slip it came from is dealt with.
-                if (!wasEdit) forgetSlip()
-                if (wasEdit && editOnly) {
-                    finish()
-                    return@launch
-                }
-                editing = null
-                amountBox.setText("")
-                noteBox.setText("")
-                if (incoming) sourceBox.setText("")
-                amountBox.requestFocus()
-                status.text = if (wasEdit) EDITED else SAVED
-                refresh(repo)
-            } catch (e: Exception) {
-                status.text = "บันทึกไม่ได้ ${e.message ?: e.toString()}"
-            } finally {
-                busy = false
-                render()
-            }
-        }
-    }
-
-    /**
-     * The slip this form came from is dealt with: off the waiting list, out of
-     * the shade, and not attached to whatever is typed in next.
-     */
-    private fun forgetSlip() {
-        if (slipId >= 0L) {
-            PendingSlips.remove(this, slipId)
-            Notifications.cancelSlip(this, slipId)
-        }
-        slipId = -1L
-        slipRef = null
-    }
-
-    /**
-     * A code turned into a sentence, here and nowhere else.
-     *
-     * One list for both directions, which is the visible half of the shared
-     * layer answering the same three questions for each: is this a number, is
-     * it more than nothing, and what unit is it counted in.
-     */
-    private fun sentence(code: String): String = when (code) {
-        "amount-missing" -> "ยังไม่ได้ใส่จำนวนเงิน"
-        "amount-not-a-number" -> "จำนวนเงินต้องเป็นตัวเลข"
-        "amount-not-positive" -> "จำนวนเงินต้องมากกว่าศูนย์"
-        "currency-missing" -> "ยังไม่รู้ว่าเป็นเงินสกุลไหน ซิงก์กับคอมก่อน"
-        "date-missing" -> "ยังไม่ได้ใส่วันที่"
-        "date-malformed" -> "วันที่ต้องเป็นแบบ 2026-08-20"
-        else -> code
-    }
-
-    // ─── looks ──────────────────────────────────────────────────────────────
-    //
-    // These four were a private copy of a design, in every screen, in raw
-    // pixels and hand-picked greys. What is left of them is the one decision
-    // that really is local: which keyboard this particular box wants.
-
-    private fun field(hint: String, type: Int): EditText = Ui.field(
-        this,
-        hint,
-        if (type == 0) InputType.TYPE_CLASS_TEXT else InputType.TYPE_CLASS_NUMBER or type,
-    )
-
-    private fun label(text: String): TextView = Ui.fieldLabel(this, text)
-
-    private fun note(text: String): TextView = Ui.note(this, text)
-
-    // topMargin was 24 PIXELS, which on this phone is about nine points and on
-    // a cheap one is twenty-four. Same code, two layouts, neither chosen.
-    private fun rowParams(): LinearLayout.LayoutParams = Ui.row(this, 14f)
-
-    private fun chipParams(): LinearLayout.LayoutParams = Ui.cell(this)
 
     companion object {
         /** Open straight into the payment side. Absent means spending. */
@@ -801,7 +150,7 @@ class AddMoneyActivity : Activity() {
 
         // Opened with a form already filled in. Strings rather than numbers:
         // what arrives is what a recogniser read, and the person is about to
-        // look at it in a text box either way.
+        // look at it in a box either way.
         const val EXTRA_AMOUNT = "app.reup.amount"
         const val EXTRA_DATE = "app.reup.date"
         const val EXTRA_NOTE = "app.reup.note"
@@ -827,58 +176,7 @@ class AddMoneyActivity : Activity() {
         /** Why that slip could not be saved with one press, as a sentence. */
         const val EXTRA_SLIP_CHECK = "app.reup.slip_check"
 
-        private const val SLIP_ALREADY = "สลิปใบนี้บันทึกไปแล้ว"
-
-
-        private const val UNIT_GUESSED =
-            "ยังไม่เคยซิงก์สกุลเงินจากคอม อันนี้เป็นค่าตั้งต้น เช็คก่อนบันทึก"
-
-        private const val RECENT_TITLE = "ล่าสุด"
-
-        /** Nothing on a row says it can be pressed, so the heading says it. */
-        private const val RECENT_HINT = "กดค้างที่รายการเพื่อแก้หรือลบ"
-
-        private const val SAVED = "บันทึกแล้ว"
-
-        private const val DELETED = "ลบแล้ว"
-
-        private const val EDITED = "แก้แล้ว"
-
-        private const val EDITING = "กำลังแก้รายการนี้"
-
-        private const val CANCEL_EDIT = "ยกเลิกแก้"
-
-        private const val MENU_EDIT = "แก้ไข"
-
-        private const val MENU_DELETE = "ลบ"
-
-        private const val DELETE_TITLE = "ลบรายการนี้"
-
-        private const val DELETE_YES = "ลบ"
-
-        private const val DELETE_NO = "ไม่ลบ"
-
-        private const val TODAY = "วันนี้"
-
-        /** A row with neither a label nor a note still has to say something. */
-        private const val OUTGOING = "รายจ่าย"
-
-        private const val INCOMING = "รายรับ"
-
-        /**
-         * Two empty states, because they are two different facts.
-         *
-         * A phone that has synced and has nothing is a person who has not
-         * written anything down. A phone that has never synced is a phone that
-         * has not been told anything yet, and telling it to start recording
-         * would be answering a question it was not asked.
-         */
-        private const val NO_ENTRIES = "ยังไม่มีรายการในเครื่องนี้"
-
-        private const val NO_ENTRIES_YET =
-            "ยังไม่มีรายการในเครื่องนี้ ซิงก์กับคอมแล้วจะดึงของเก่าลงมา"
-
-        private const val NO_CATEGORIES =
-            "ยังไม่มีหมวดในเครื่องนี้ จะบันทึกเป็น other แล้วแก้บนคอมทีหลังได้"
+        /** Money in read off a bank's notification, by its id. Saving takes it off the list. */
+        const val EXTRA_NOTICE_ID = "app.reup.notice_id"
     }
 }

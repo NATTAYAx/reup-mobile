@@ -579,8 +579,12 @@ fun expenseIcon(key: String?): Int? = when (key) {
 
 // ── navigation ───────────────────────────────────────────────────────────────
 
+/**
+ * One tab. [badge] is a dot by its icon: in the warning colour by default, for
+ * something wrong; [badgeColor] for a dot that only means something is waiting.
+ */
 @Immutable
-class BarItem(val label: String, @DrawableRes val icon: Int, val badge: Boolean = false)
+class BarItem(val label: String, @DrawableRes val icon: Int, val badge: Boolean = false, val badgeColor: Color? = null)
 
 /**
  * The three tabs.
@@ -640,7 +644,7 @@ private fun RowScope.BarCell(item: BarItem, on: Boolean, onClick: () -> Unit) {
                         .padding(top = 3.dp, end = 15.dp)
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(c.warn),
+                        .background(item.badgeColor ?: c.warn),
                 )
             }
         }

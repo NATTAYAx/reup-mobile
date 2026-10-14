@@ -37,12 +37,13 @@ import org.json.JSONObject
  * Slips that arrive on their own: the bank's app saves one into an album, and
  * a moment later it is in Reup.
  *
- * ─── THE ONE THING IN THIS APP THAT WAKES UP BY ITSELF ───────────────────────
+ * ─── ONE OF TWO THINGS IN THIS APP THAT WAKE UP BY THEMSELVES ───────────────
  *
  * Repo.syncQuietly says this app does no work in the background, and means it:
  * the battery is worn, and a periodic worker is exactly what shows up in the
- * battery screen with the app's name beside it. This is the exception, and it
- * is shaped to cost as close to nothing as an exception can:
+ * battery screen with the app's name beside it. This is one exception - the
+ * other is BankNoticeListener, for money coming in - and it is shaped to cost
+ * as close to nothing as an exception can:
  *
  *  • Off until it is turned on, in Settings, by the person.
  *  • Nothing periodic. The system wakes it when a picture is added to the
@@ -388,6 +389,10 @@ object SlipWatch {
         val draft = slipDraft(reading, text, savedAt, split)
         val slip = PendingSlip(p.id, p.album, p.addedAt * 1000L, draft)
         PendingSlips.add(ctx, slip)
+        // Money that left, for money coming in to be compared with: a slip
+        // to oneself here is what says K PLUS's money in a minute later is
+        // the same baht, moved.
+        BankNotices.slipRead(ctx, slip)
         markDone(ctx, p)
 
         val label = expenseLabel(draft.category, categories.firstOrNull { it.key == draft.category }?.label)

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The widget, as the home screen's list of widgets sees it.
+
+  Four by two to start, and any size from two by two up: ReupWidget cuts a
+  layout for whatever size it is dragged to. updatePeriodMillis is 0 because
+  nothing is drawn on a timer - see ReupWidget for when it is drawn instead.
+  The preview in the list is the four-by-two layout itself, in the default
+  theme, with its clock running.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/widget_medium"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="110dp"
+    android:previewLayout="@layout/widget_medium"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

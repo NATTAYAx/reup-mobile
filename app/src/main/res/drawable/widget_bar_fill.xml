@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The bar's length is this drawable's level, 0 to 10000, set from the widget
+  with setImageLevel: a progress bar's own colours cannot be changed from a
+  widget before Android 12, and an image's can.
+-->
+<clip xmlns:android="http://schemas.android.com/apk/res/android"
+    android:clipOrientation="horizontal"
+    android:drawable="@drawable/widget_bar"
+    android:gravity="left" />

@@ -137,6 +137,40 @@ class HorizonTest {
         assertEquals(without, withQuiet)
     }
 
+    /** The 11th of August on the wall in Bangkok, or the day after with [next]. */
+    private fun wall(clock: String, next: Boolean = false): Instant =
+        Instant.parse((if (next) "2026-08-12" else "2026-08-11") + "T$clock:00+07:00")
+
+    @Test
+    fun `the moon is up exactly while an alarm would be silent`() {
+        val quiet = QuietHours("23:00", "08:00")
+        assertTrue(inQuiet(wall("23:00"), quiet, bkk))
+        assertTrue(inQuiet(wall("23:30"), quiet, bkk))
+        assertTrue(inQuiet(wall("07:59", next = true), quiet, bkk))
+        assertTrue(!inQuiet(wall("08:00", next = true), quiet, bkk))
+        assertTrue(!inQuiet(wall("22:59"), quiet, bkk))
+        assertTrue(!inQuiet(wall("23:30"), null, bkk))
+        assertTrue(!inQuiet(wall("08:00"), QuietHours("08:00", "08:00"), bkk), "equal bounds are off")
+        // The same answer the queue gives for an alarm at that minute.
+        val pinned = horizon(listOf(daily04), now, bkk, limit = 1, quiet = quiet).single()
+        assertEquals(pinned.silent, inQuiet(pinned.fireAt, quiet, bkk))
+    }
+
+    @Test
+    fun `the next edge of quiet hours is whichever comes first`() {
+        val quiet = QuietHours("23:00", "08:00")
+        assertEquals(wall("23:00"), nextQuietEdge(wall("10:00"), quiet, bkk))
+        assertEquals(wall("08:00", next = true), nextQuietEdge(wall("23:30"), quiet, bkk))
+        assertEquals(wall("08:00", next = true), nextQuietEdge(wall("23:00"), quiet, bkk), "strictly after")
+        assertEquals(wall("08:00"), nextQuietEdge(wall("07:00"), quiet, bkk))
+        assertEquals(null, nextQuietEdge(wall("10:00"), null, bkk))
+        assertEquals(null, nextQuietEdge(wall("10:00"), QuietHours("08:00", "08:00"), bkk))
+        // A window that does not wrap midnight.
+        val lunch = QuietHours("13:00", "14:00")
+        assertEquals(wall("14:00"), nextQuietEdge(wall("13:30"), lunch, bkk))
+        assertEquals(wall("13:00", next = true), nextQuietEdge(wall("14:00"), lunch, bkk))
+    }
+
     @Test
     fun `a paused task contributes nothing before it wakes`() {
         val until = Instant.parse("2026-08-15T17:00:00Z") // 16 Aug 00:00 local

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The only string here. Every other word in this app is written in the
+      Kotlin (LATER.md says why); this one is read by the home screen's widget
+      list, which can only take it from a resource.
+    -->
+    <string name="widget_description">เวลา งานถัดไป และสิ่งที่ยังไม่ทำ บนหน้าจอหลัก</string>
+</resources>
