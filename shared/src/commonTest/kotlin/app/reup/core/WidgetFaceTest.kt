@@ -34,7 +34,7 @@ class WidgetFaceTest {
     // ── what is next, and what comes after it ───────────────────────────────
 
     @Test
-    fun `the card is the Today tab's card, and the rest of the day follows it`() {
+    fun `the card is the soonest thing due, and the rest of the day follows it`() {
         val rows = listOf(
             daily("a", at("2026-10-14", "13:00")),
             daily("b", at("2026-10-14", "18:00")),
@@ -43,7 +43,6 @@ class WidgetFaceTest {
         )
         val face = widgetFace(rows, now, bkk, null)
 
-        assertEquals(todayFace(rows, now, bkk).next?.id, face.next?.id)
         assertEquals(WidgetLine("a", "a", "13:00"), face.next)
         assertEquals(null, face.calm)
         // A daily resetting at four tomorrow is tonight's work: within a day.
@@ -54,22 +53,42 @@ class WidgetFaceTest {
     }
 
     @Test
-    fun `a calm day names tomorrow's first round once, not twice`() {
+    fun `at night the first round after midnight is next, not a calm day`() {
+        // Twenty past eight: everything left resets after midnight. The card
+        // used to say nothing resets today while the bar counted these same
+        // rounds as today's.
+        val evening = at("2026-10-14", "20:20")
+        val rows = listOf(
+            daily("star", at("2026-10-15", "03:00")),
+            daily("fgo", at("2026-10-15", "04:00")),
+            daily("rumble", at("2026-10-15", "10:00")),
+            weekly("raid", at("2026-10-19", "05:00")),
+        )
+        val face = widgetFace(rows, evening, bkk, null)
+
+        assertEquals(WidgetLine("star", "star", "พรุ่งนี้ 03:00"), face.next)
+        assertEquals(null, face.calm)
+        assertEquals(listOf("fgo", "rumble"), face.soon.map { it.id })
+        assertEquals(listOf("raid"), face.later.map { it.id })
+        assertEquals(0, face.done)
+        assertEquals(3, face.load)
+    }
+
+    @Test
+    fun `a calm day names the round after it once, not twice`() {
         val rows = listOf(
             daily("x", at("2026-10-15", "04:00"), done = true, doneToday = true),
-            daily("y", at("2026-10-15", "04:00")),
             weekly("z", at("2026-10-17", "05:00")),
         )
         val face = widgetFace(rows, now, bkk, null)
 
         assertEquals(null, face.next)
         assertEquals("วันนี้ทำครบแล้ว", face.calm)
-        assertEquals(WidgetLine("y", "y", "พรุ่งนี้ 04:00"), face.calmNext)
-        assertEquals(emptyList(), face.soon, "the round the card names is not listed under it")
-        assertEquals(listOf("z"), face.later.map { it.id })
-        // What was ticked, and the round still due within the day.
+        assertEquals(WidgetLine("z", "z", "ส. 05:00", warn = false), face.calmNext)
+        assertEquals(emptyList(), face.soon)
+        assertEquals(emptyList(), face.later, "the round the card names is not listed under it")
         assertEquals(1, face.done)
-        assertEquals(2, face.load)
+        assertEquals(1, face.load)
     }
 
     @Test
@@ -105,7 +124,9 @@ class WidgetFaceTest {
             ),
             face.later,
         )
-        assertEquals("t", face.calmNext?.id)
+        // Four tomorrow morning is within the day: the card, not a calm day.
+        assertEquals("t", face.next?.id)
+        assertEquals(null, face.calmNext)
         assertEquals(emptyList(), face.soon)
     }
 
@@ -195,6 +216,15 @@ class WidgetFaceTest {
             Instant.fromEpochMilliseconds(now.toEpochMilliseconds() + 60_000),
             widgetNextChange(listOf(edge), now, bkk, null),
         )
+    }
+
+    // ── the bar's words ─────────────────────────────────────────────────────
+
+    @Test
+    fun `the bar says what the day holds until something is ticked`() {
+        assertEquals(emptyList(), widgetTally(0, 0))
+        assertEquals(listOf("7 อย่าง", "7 อย่างใน 24 ชม.", "7 อย่างภายใน 24 ชั่วโมง"), widgetTally(0, 7))
+        assertEquals(listOf("2/7", "ทำแล้ว 2/7", "ทำแล้ว 2 จาก 7"), widgetTally(2, 7))
     }
 
     // ── money, when it has been asked for ───────────────────────────────────

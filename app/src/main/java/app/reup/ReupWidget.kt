@@ -25,6 +25,7 @@ import app.reup.core.paletteOf
 import app.reup.core.widgetFace
 import app.reup.core.widgetMoneyLine
 import app.reup.core.widgetNextChange
+import app.reup.core.widgetTally
 import app.reup.sync.CURRENCY_FALLBACK
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.datetime.Clock
@@ -429,21 +430,30 @@ class ReupWidget : AppWidgetProvider() {
             v.setTextColor(R.id.w_head_name, ink.dim)
         }
 
-        /** The bar: ticked today out of today's. Not drawn on a day with nothing in it. */
+        /**
+         * The bar: ticked today out of what the day holds. Not drawn on a day
+         * with nothing in it, and only the words until something is ticked -
+         * an empty bar beside "0 of 7" scores an evening before it happens.
+         */
         private fun progress(v: RemoteViews, kind: Kind, face: WidgetFace, ink: Ink) {
-            if (face.load <= 0) {
+            val words = widgetTally(face.done, face.load)
+            if (words.isEmpty()) {
                 v.setViewVisibility(R.id.w_progress, View.GONE)
                 return
             }
             v.setViewVisibility(R.id.w_progress, View.VISIBLE)
-            v.setInt(R.id.w_bar_fill, "setImageLevel", 10_000 * face.done / face.load)
-            v.setInt(R.id.w_bar_fill, "setColorFilter", if (face.done >= face.load) ink.positive else ink.accent)
+            val ticked = face.done > 0
+            v.setViewVisibility(R.id.w_bar, if (ticked) View.VISIBLE else View.GONE)
+            if (ticked) {
+                v.setInt(R.id.w_bar_fill, "setImageLevel", 10_000 * face.done / face.load)
+                v.setInt(R.id.w_bar_fill, "setColorFilter", if (face.done >= face.load) ink.positive else ink.accent)
+            }
             v.setTextViewText(
                 R.id.w_count,
                 when (kind) {
-                    Kind.SMALL -> "${face.done}/${face.load}"
-                    Kind.MEDIUM -> "ทำแล้ว ${face.done}/${face.load}"
-                    Kind.LARGE -> "วันนี้ทำแล้ว ${face.done} จาก ${face.load}"
+                    Kind.SMALL -> words[0]
+                    Kind.MEDIUM -> words[1]
+                    Kind.LARGE -> words[2]
                 },
             )
             v.setTextColor(R.id.w_count, ink.dim)

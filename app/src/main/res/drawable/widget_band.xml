@@ -6,6 +6,9 @@
 
   A gradient rather than a picture, so the home screen draws it directly and
   keeps no copy of it in memory between frames.
+
+  About a third white at its brightest. It started at a seventh, which on a
+  photo behind a dark scrim nobody could see go by at all.
 -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:insetBottom="-20%"
@@ -20,7 +23,7 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="0"
-                android:centerColor="#24FFFFFF"
+                android:centerColor="#55FFFFFF"
                 android:endColor="#00FFFFFF"
                 android:startColor="#00FFFFFF" />
         </shape>

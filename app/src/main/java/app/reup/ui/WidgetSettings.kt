@@ -1,5 +1,6 @@
 package app.reup.ui
 
+import android.animation.ValueAnimator
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -90,10 +91,14 @@ internal fun WidgetCard(w: WidgetModel, actions: AppActions) {
             title = "แสงวิ่ง",
             on = look.motion,
             onSet = w::setMotion,
-            line = if (look.motion) {
-                "แสงวิ่งผ่านแวบเดียว ราวทุกแปดวินาที หน้าจอหลักวาดเอง หยุดตอนจอปิดหรือเปิดแอปอื่น"
-            } else {
-                "วิดเจ็ตนิ่ง ไม่มีอะไรขยับนอกจากนาฬิกา"
+            line = when {
+                !look.motion -> "วิดเจ็ตนิ่ง ไม่มีอะไรขยับนอกจากนาฬิกา"
+                // The widget follows the system's switch for animation, so a
+                // phone with it off shows a still widget with this set to on.
+                // Saying so here is the only place anybody would find out why.
+                !ValueAnimator.areAnimatorsEnabled() ->
+                    "ตอนนี้ระบบปิดภาพเคลื่อนไหวไว้ แสงเลยไม่วิ่ง ดูที่โหมดประหยัดแบต หรือ ตัวเลือกนักพัฒนา → ระยะเวลาภาพเคลื่อนไหว"
+                else -> "แสงวิ่งผ่านแวบเดียว ราวทุกแปดวินาที หน้าจอหลักวาดเอง หยุดตอนจอปิดหรือเปิดแอปอื่น"
             },
         )
 
