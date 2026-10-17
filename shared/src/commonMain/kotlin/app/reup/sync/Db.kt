@@ -179,6 +179,11 @@ object SyncMigrations {
         // retired, and a retired key that leaves no trace is a setting the other
         // device pushes back and resurrects.
         Table("user_settings", needsDeleted = true, hasCreatedAt = false),
+        // Notes stuck on the home screen. Taking one off is the tombstone and
+        // only the tombstone: a note that came back on the other machine
+        // because its removal left no trace would be the one thing a note
+        // must never do.
+        Table("notes", needsDeleted = true, hasCreatedAt = true),
     )
 
     /**

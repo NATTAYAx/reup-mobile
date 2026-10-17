@@ -46,6 +46,10 @@ import app.reup.core.paletteOf
 interface AppActions {
     fun addTask()
     fun editTask(uid: String)
+
+    /** The sheet for sticking up a note, or for changing the one with [uid]. */
+    fun addNote()
+    fun editNote(uid: String)
     fun addMoney(incoming: Boolean)
     fun editMoney(uid: String)
     fun openSync()
@@ -77,6 +81,12 @@ interface AppActions {
 
     /** Ask the home screen to take a widget, or say how to add one where it cannot be asked. */
     fun placeWidget()
+
+    /** The photo picker, for the wallpaper's clip: videos only. Answered through WallModel.picked. */
+    fun pickWallpaperClip()
+
+    /** The system's own page for setting this app's moving wallpaper. */
+    fun setWallpaper()
 }
 
 /** The three tabs, in the bar's order. Public so the widget can ask for one. */

@@ -1,6 +1,7 @@
 package app.reup
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -116,6 +117,11 @@ class MainActivity : ComponentActivity(), AppActions {
         if (uri != null) model.widget.picked(uri)
     }
 
+    /** The same picker, for the wallpaper's clip. */
+    private val pickClip = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) model.wall.picked(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // First, before anything is drawn. The screens still opened from here
@@ -190,6 +196,16 @@ class MainActivity : ComponentActivity(), AppActions {
         formAnswer.launch(Intent(this, AddTaskActivity::class.java).putExtra(AddTaskActivity.EXTRA_UID, uid))
     }
 
+    // The note sheet says what it did itself, and the list is read again when
+    // this screen comes back, so neither needs an answer handed back.
+    override fun addNote() {
+        startActivity(Intent(this, AddNoteActivity::class.java))
+    }
+
+    override fun editNote(uid: String) {
+        startActivity(Intent(this, AddNoteActivity::class.java).putExtra(AddNoteActivity.EXTRA_UID, uid))
+    }
+
     override fun addMoney(incoming: Boolean) {
         formAnswer.launch(Intent(this, AddMoneyActivity::class.java).putExtra(AddMoneyActivity.EXTRA_INCOMING, incoming))
     }
@@ -251,6 +267,36 @@ class MainActivity : ComponentActivity(), AppActions {
         } catch (e: Exception) {
             model.say("เปิดที่เลือกรูปไม่ได้")
         }
+    }
+
+    override fun pickWallpaperClip() {
+        try {
+            pickClip.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+        } catch (e: Exception) {
+            model.say("เปิดที่เลือกคลิปไม่ได้")
+        }
+    }
+
+    /**
+     * Only the system sets a wallpaper, on its own page with its own button.
+     * Its preview of this one first; the list of moving wallpapers on a phone
+     * whose maker left that out. WallModel hears how it went when this screen
+     * comes back.
+     */
+    override fun setWallpaper() {
+        model.wall.opening()
+        for (intent in WallClip.setIntents(this)) {
+            try {
+                startActivity(intent)
+                return
+            } catch (e: ActivityNotFoundException) {
+                // The next one.
+            } catch (e: SecurityException) {
+                // The next one.
+            }
+        }
+        model.wall.notOpened()
+        model.say("เปิดหน้าตั้งวอลเปเปอร์ไม่ได้ ตั้งเองได้ที่ ตั้งค่าเครื่อง → วอลเปเปอร์ → วอลเปเปอร์เคลื่อนไหว แล้วหา Reup คลิป")
     }
 
     /**

@@ -26,7 +26,13 @@
 //
 // When the slip has a date of its own, that one is used and the file only has
 // to be within a day of it — a transfer at 23:59 saved at 00:01 is still the
-// same transfer. Further apart than that is a slip saved long after the fact.
+// same transfer. Further apart than that is one of two things. A slip saved
+// long after the fact is dated before its file and its time does not match;
+// it keeps its own date and waits for a person. A date read off the slip that
+// is after its file, or whose time on the slip is the file's to the minute, is
+// the recogniser misreading the date, not a slip saved later. The file's day is
+// used instead, and the slip still waits for a person, told which date was
+// read and which was used.
 //
 // ─── WHAT GETS ONE PRESS AND WHAT DOES NOT ───────────────────────────────────
 //
@@ -44,9 +50,14 @@
 // No space is needed — "อาหารทดสอบ" is what was actually typed the first time.
 // A memo that names no category is looked up against the notes already in the
 // books, so ข้าวมันไก่ goes wherever ข้าวมันไก่ went last time.
+//
+// A slip with no memo at all may still say what was bought: Pao Tang prints
+// what a shop sells under the shop's name - "อาหาร ของหวาน เครื่องดื่ม" - and
+// that line is read the way a memo is (shopCategory).
 
 package app.reup.sync
 
+import app.reup.core.THAI_MONTHS_SHORT
 import app.reup.core.expenseLabel
 import app.reup.core.moneyDayTitle
 import app.reup.core.moneyText
@@ -88,10 +99,29 @@ fun memoCategory(memo: String?, categories: List<Category>): MemoSplit {
     // Positions are carried from one to the other, so they must line up.
     if (lower.length != text.length) return MemoSplit(null, text)
     val (best, end) = named(lower, categories, exact = true) ?: named(lower, categories, exact = false)
-    ?: return MemoSplit(null, text)
+        ?: return MemoSplit(null, text)
     val rest = text.substring(end).trimStart(' ', '-', ':', ',', '.', '/', '|', '\u00B7').trim()
     return MemoSplit(best, rest)
 }
+
+/**
+ * The category a slip with no memo names in a line of its own, or null.
+ *
+ * Pao Tang prints what a shop sells under the shop's name, and a line that
+ * starts with a category's name the way a memo would - "อาหาร ของหวาน
+ * เครื่องดื่ม" - is taken as that category. Only a line with no digits and no
+ * label on it, so an account, an amount or "บันทึกช่วยจำ: ..." is never one,
+ * and only when the slip has exactly one such category. Never the fallback:
+ * that is what no category is filed as anyway, so it says nothing.
+ */
+fun shopCategory(raw: String, categories: List<Category>): String? =
+    raw.lines()
+        .map { it.trim() }
+        .filter { line -> line.isNotEmpty() && line.none { it.isDigit() } && ':' !in line }
+        .mapNotNull { memoCategory(it, categories).category }
+        .filter { it != CATEGORY_FALLBACK }
+        .distinct()
+        .singleOrNull()
 
 /**
  * The category [lower] starts with and where its name ends, the longest name
@@ -309,7 +339,7 @@ private const val CLOCK_SLACK = 5
 private val BLOCKING = setOf(
     "no-amount", "amount-ambiguous", "amount-unsure",
     "no-currency", "currency-ambiguous",
-    "date-ambiguous", "date-from-file", "date-not-file-day",
+    "date-ambiguous", "date-from-file", "date-not-file-day", "date-misread",
 )
 
 /**
@@ -321,8 +351,13 @@ private val BLOCKING = setOf(
  *   date-from-file     the slip has no date that could be read and no time
  *                      that matches the file, so the date is the file's and
  *                      nothing confirms it
- *   date-not-file-day  the slip's date is more than a day away from when the
- *                      picture was saved: a slip saved again long afterwards
+ *   date-not-file-day  the slip's date is more than a day before when the
+ *                      picture was saved, and its time is not the file's: a
+ *                      slip saved again long afterwards
+ *   date-misread       the date read off the slip is more than a day away from
+ *                      the file's and cannot be the transfer's - after the file,
+ *                      or with the file's own time on it - so the file's day is
+ *                      used and the misread one is kept in [SlipDraft.other]
  */
 data class SlipDraft(
     val amount: Double?,
@@ -341,11 +376,17 @@ data class SlipDraft(
     /** Money moved between the payer's own accounts. See [paidToSelf]. */
     val toSelf: Boolean,
     val problems: List<String>,
+    /**
+     * When the slip and the file disagree about the day, the one [date] is
+     * not: the file's day under date-not-file-day, the date read off the slip
+     * under date-misread. Null otherwise, and on slips kept from before.
+     */
+    val other: String? = null,
 ) {
     /** Nothing left to check: one press may write it. */
     val oneTap: Boolean
         get() = amount != null && amount > 0.0 && currency != null && !toSelf &&
-                problems.none { it in BLOCKING }
+            problems.none { it in BLOCKING }
 }
 
 /**
@@ -372,19 +413,38 @@ fun slipDraft(reading: SlipReading, raw: String, savedAt: LocalDateTime, split: 
     val near = clocks.firstOrNull { abs(apart(it)) <= CLOCK_SLACK }
     val problems = reading.problems.filter { it != "no-date" }.toMutableList()
     val printed = reading.date?.let { d -> runCatching { LocalDate.parse(d) }.getOrNull() }
+    // The file's day, moved across midnight when the time on the slip is just
+    // the other side of it.
+    fun filesDay(clock: Int): LocalDate {
+        val shift = when {
+            clock - savedMinute > 720 -> -1
+            clock - savedMinute < -720 -> 1
+            else -> 0
+        }
+        return saved.plus(shift, DateTimeUnit.DAY)
+    }
+    var other: String? = null
     val date = when {
+        printed != null && abs(saved.daysUntil(printed)) <= 1 -> iso(printed)
+        // Days out, but the time on the slip is the file's to the minute: the
+        // picture was saved when the money went, and the date was misread.
+        printed != null && near != null -> {
+            problems += "date-misread"
+            other = iso(printed)
+            iso(filesDay(near))
+        }
+        // Days after the picture was saved: no slip is printed after it is kept.
+        printed != null && saved.daysUntil(printed) > 1 -> {
+            problems += "date-misread"
+            other = iso(printed)
+            iso(saved)
+        }
         printed != null -> {
-            if (abs(saved.daysUntil(printed)) > 1) problems += "date-not-file-day"
+            problems += "date-not-file-day"
+            other = iso(saved)
             iso(printed)
         }
-        near != null -> {
-            val shift = when {
-                near - savedMinute > 720 -> -1
-                near - savedMinute < -720 -> 1
-                else -> 0
-            }
-            iso(saved.plus(shift, DateTimeUnit.DAY))
-        }
+        near != null -> iso(filesDay(near))
         else -> {
             if ("date-ambiguous" !in problems) problems += "date-from-file"
             iso(saved)
@@ -401,6 +461,7 @@ fun slipDraft(reading: SlipReading, raw: String, savedAt: LocalDateTime, split: 
         category = split.category,
         toSelf = paidToSelf(raw),
         problems = problems,
+        other = other,
     )
 }
 
@@ -437,6 +498,11 @@ fun slipCheck(d: SlipDraft): String? = when {
     "amount-ambiguous" in d.problems || "amount-unsure" in d.problems -> "อ่านยอดเงินไม่ชัด เช็คจำนวนก่อนบันทึก"
     d.currency == null || "no-currency" in d.problems || "currency-ambiguous" in d.problems ->
         "ไม่แน่ใจว่าเป็นเงินสกุลไหน เช็คก่อนบันทึก"
+    "date-misread" in d.problems && d.other != null ->
+        "อ่านวันที่บนสลิปได้ ${slipDay(d.other, d.date)} ซึ่งไม่น่าใช่ เลยใช้วันที่เซฟรูป ${slipDay(d.date, d.other)} เช็คก่อนบันทึก"
+    "date-misread" in d.problems -> "อ่านวันที่บนสลิปไม่น่าใช่ เลยใช้วันที่เซฟรูป เช็คก่อนบันทึก"
+    "date-not-file-day" in d.problems && d.other != null ->
+        "สลิปลงวันที่ ${slipDay(d.date, d.other)} แต่เซฟรูปวันที่ ${slipDay(d.other, d.date)} เช็ควันที่ก่อนบันทึก"
     "date-not-file-day" in d.problems -> "วันที่บนสลิปไม่ตรงกับวันที่เซฟรูป เช็ควันที่ก่อนบันทึก"
     "date-ambiguous" in d.problems -> "วันที่อ่านได้สองแบบ เช็ควันที่ก่อนบันทึก"
     "date-from-file" in d.problems -> "อ่านวันที่บนสลิปไม่ได้ ใส่วันที่เซฟรูปไว้ เช็คก่อนบันทึก"
@@ -469,6 +535,18 @@ fun slipFace(d: SlipDraft, label: String, today: LocalDate): SlipFace {
 private fun plain(a: Double): String = if (a == a.toLong().toDouble()) a.toLong().toString() else a.toString()
 
 private fun pad(n: Int): String = if (n < 10) "0$n" else n.toString()
+
+/**
+ * [date] the way a Thai slip prints it: 16 ต.ค., with the Buddhist year only
+ * when it is not [beside]'s - a year read as 2568 has to be seen to be
+ * noticed. The date itself when it will not read.
+ */
+private fun slipDay(date: String, beside: String): String {
+    val d = runCatching { LocalDate.parse(date) }.getOrNull() ?: return date
+    val b = runCatching { LocalDate.parse(beside) }.getOrNull()
+    val day = "${d.dayOfMonth} ${THAI_MONTHS_SHORT[d.monthNumber - 1]}"
+    return if (b != null && b.year == d.year) day else "$day ${d.year + 543}"
+}
 
 private fun hhmm(minutes: Int): String = pad(minutes / 60) + ":" + pad(minutes % 60)
 

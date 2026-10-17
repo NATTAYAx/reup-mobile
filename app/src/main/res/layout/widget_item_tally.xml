@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The day's bar in the widget's list, after the day's rows, as the board has it: the words, then the bar. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_item"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="8dp"
+    android:paddingBottom="3dp">
+
+    <TextView
+        android:id="@+id/w_tally_words"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:fontFeatureSettings="tnum"
+        android:maxLines="1"
+        android:shadowColor="#40000000"
+        android:shadowDy="1"
+        android:shadowRadius="3"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp" />
+
+    <FrameLayout
+        android:id="@+id/w_tally_bar"
+        android:layout_width="0dp"
+        android:layout_height="4dp"
+        android:layout_marginStart="10dp"
+        android:layout_weight="1">
+
+        <ImageView
+            android:id="@+id/w_tally_track"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY"
+            android:src="@drawable/widget_bar_track" />
+
+        <ImageView
+            android:id="@+id/w_tally_fill"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY"
+            android:src="@drawable/widget_bar_fill" />
+    </FrameLayout>
+</LinearLayout>

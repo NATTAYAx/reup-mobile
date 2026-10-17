@@ -9,7 +9,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import app.reup.ClipFrames
 import app.reup.ReupWidget
+import app.reup.WidgetFilm
 import app.reup.WidgetLook
+import app.reup.core.FilmPace
+import app.reup.core.InkMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -20,19 +23,29 @@ import kotlinx.coroutines.withContext
 //
 // The widget draws itself from WidgetLook and the database; nothing here is
 // needed for it to be right. This is the part with a person in front of it:
-// picking a picture, picking a frame out of a clip, the two switches, and
-// asking the home screen to take one.
+// picking a picture, a GIF, or a stretch of a clip; the switches; the tasks
+// whose names it keeps to itself; and asking the home screen to take one.
 
 /** A clip open in the frame picker. */
 class FramePick(val durationMs: Long) {
-    /** Where the slider is. */
+    /** Where the slider is: the frame, or where the film starts. */
     var atMs by mutableStateOf(0L)
 
     /** The frame there, roughly: the nearest key frame, which is what a drag can keep up with. */
     var preview by mutableStateOf<ImageBitmap?>(null)
 
-    /** The exact frame is being read and kept. */
+    /** A film from here rather than this one frame. Where a clip starts, since a clip was picked to move. */
+    var moving by mutableStateOf(true)
+
+    /** Twenty-four pages a second for two seconds, rather than twelve for four. */
+    var smooth by mutableStateOf(true)
+
+    /** The frame, or the film, is being read and kept. */
     var keeping by mutableStateOf(false)
+
+    /** How far a film is: frames read, of how many. 0 of 0 before it starts. */
+    var made by mutableStateOf(0)
+    var total by mutableStateOf(0)
 }
 
 class WidgetModel(
@@ -57,6 +70,14 @@ class WidgetModel(
 
     /** A picture is being read. */
     var reading by mutableStateOf(false)
+        private set
+
+    /** A GIF being made into a film: frames done, of how many. */
+    var progress by mutableStateOf<Pair<Int, Int>?>(null)
+        private set
+
+    /** The list of tasks whose names the widget keeps to itself is open. */
+    var hiding by mutableStateOf(false)
         private set
 
     private var clip: ClipFrames? = null
@@ -88,9 +109,51 @@ class WidgetModel(
         say("เอาพื้นหลังออกแล้ว วิดเจ็ตใช้สีธีม")
     }
 
+    fun setClear(on: Boolean) {
+        if (on == look.clear) return
+        WidgetLook.setClear(ctx, on)
+        look = WidgetLook.read(ctx)
+    }
+
+    /** Which way round the words go over the picture. */
+    fun setInk(mode: InkMode) {
+        if (mode == look.ink) return
+        WidgetLook.setInk(ctx, mode)
+        look = WidgetLook.read(ctx)
+    }
+
+    /**
+     * The moving wallpaper was just set from this app: the widget turns clear
+     * so it plays behind it, as the wallpaper row said it would. False when it
+     * already was.
+     */
+    fun wallpaperSet(): Boolean {
+        if (look.clear) return false
+        setClear(true)
+        return true
+    }
+
+    fun openHidden() {
+        hiding = true
+    }
+
+    fun closeHidden() {
+        hiding = false
+    }
+
+    /** These tasks, and only these, called ส่วนตัว on the widget. */
+    fun setHidden(ids: Set<String>) {
+        hiding = false
+        if (ids == look.hidden) return
+        WidgetLook.setHidden(ctx, ids)
+        look = WidgetLook.read(ctx)
+        say(if (ids.isEmpty()) "วิดเจ็ตบอกชื่อทุกงานแล้ว" else "วิดเจ็ตจะขึ้นว่า ส่วนตัว แทนชื่อ ${ids.size} งาน")
+    }
+
     /**
      * What the photo picker handed back: a picture is kept straight away, a
-     * clip opens the frame picker. Read now, while the picker's permission to
+     * GIF that moves becomes a film straight away, and a clip opens the
+     * picker for where to start. Read now, while the picker's permission to
      * read it lasts.
      */
     fun picked(uri: Uri) {
@@ -98,20 +161,38 @@ class WidgetModel(
         reading = true
         scope.launch {
             try {
-                if (WidgetLook.isClip(ctx, uri)) openClip(uri) else keepPicture(uri)
+                when {
+                    WidgetLook.isClip(ctx, uri) -> openClip(uri)
+                    WidgetLook.isGif(ctx, uri) -> keepGif(uri)
+                    else -> keepPicture(uri)
+                }
             } finally {
                 reading = false
+                progress = null
             }
         }
     }
 
-    private suspend fun keepPicture(uri: Uri) {
+    private suspend fun keepGif(uri: Uri) {
+        val kind = WidgetFilm.fromGif(ctx, uri) { done, total -> progress = done to total }
+        when (kind) {
+            WidgetFilm.GifKind.FILM -> keptFilm(true)
+            // One frame, or not moving: the picture it is.
+            WidgetFilm.GifKind.PICTURE -> keepPicture(uri)
+            // Too large to read whole, or not quite a GIF: its first frame may
+            // still decode the ordinary way.
+            WidgetFilm.GifKind.NONE -> keepPicture(uri, done = "GIF นี้ใหญ่เกินหรืออ่านไม่ครบ เลยใช้ภาพแรกเป็นภาพนิ่งแทน")
+        }
+    }
+
+    /** [done] said instead of the usual words, when it worked. */
+    private suspend fun keepPicture(uri: Uri, done: String? = null) {
         val picture = WidgetLook.readPicture(ctx, uri)
         if (picture == null) {
             say("เปิดรูปนี้ไม่ได้")
             return
         }
-        kept(runCatching { WidgetLook.keep(ctx, picture) }.isSuccess)
+        kept(runCatching { WidgetLook.keep(ctx, picture) }.isSuccess, done)
     }
 
     private suspend fun openClip(uri: Uri) {
@@ -145,13 +226,23 @@ class WidgetModel(
         asks?.trySend(pick.atMs)
     }
 
-    /** That exact frame, at full size, kept as the picture. */
+    /** That exact frame kept as the picture, or a film from there, as the picker is set. */
     fun useFrame() {
         val pick = frames ?: return
         val open = clip ?: return
         if (pick.keeping) return
         pick.keeping = true
         scope.launch {
+            if (pick.moving) {
+                val pace = if (pick.smooth) FilmPace.SMOOTH else FilmPace.LONG
+                val ok = WidgetFilm.fromClip(ctx, open, pick.atMs, pace) { done, total ->
+                    pick.made = done
+                    pick.total = total
+                }
+                closeFrames()
+                keptFilm(ok)
+                return@launch
+            }
             val frame = open.at(pick.atMs, WidgetLook.KEEP_LONGEST, exact = true)
             if (frame == null) {
                 pick.keeping = false
@@ -173,14 +264,30 @@ class WidgetModel(
         scope.launch { open.close() }
     }
 
-    private fun kept(ok: Boolean) {
+    private fun keptFilm(ok: Boolean) {
+        if (!ok) {
+            say("ทำภาพเคลื่อนไหวจากไฟล์นี้ไม่ได้")
+            return
+        }
+        look = WidgetLook.read(ctx)
+        loadThumb()
+        say(
+            when {
+                placed == 0 -> "ตั้งพื้นหลังเคลื่อนไหวแล้ว วางวิดเจ็ตบนหน้าจอหลักได้เลย"
+                !look.motion -> "ตั้งพื้นหลังเคลื่อนไหวแล้ว แต่ปิด ให้ขยับ ไว้ วิดเจ็ตเลยยังนิ่ง"
+                else -> "ตั้งพื้นหลังเคลื่อนไหวแล้ว"
+            },
+        )
+    }
+
+    private fun kept(ok: Boolean, done: String? = null) {
         if (!ok) {
             say("เก็บรูปไม่ได้")
             return
         }
         look = WidgetLook.read(ctx)
         loadThumb()
-        say(if (placed > 0) "ตั้งพื้นหลังวิดเจ็ตแล้ว" else "ตั้งพื้นหลังแล้ว วางวิดเจ็ตบนหน้าจอหลักได้เลย")
+        say(done ?: if (placed > 0) "ตั้งพื้นหลังวิดเจ็ตแล้ว" else "ตั้งพื้นหลังแล้ว วางวิดเจ็ตบนหน้าจอหลักได้เลย")
     }
 
     private fun loadThumb() {

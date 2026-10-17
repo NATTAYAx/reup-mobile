@@ -95,6 +95,15 @@
       this and the legacy webp files under mipmap-hdpi and friends are never
       read. They can be deleted whenever somebody feels like it.
     -->
+    <!--
+      A moving wallpaper is something the phone may not offer at all. Not
+      required: without it the app is the same app, and the wallpaper row in
+      Settings is the only thing that cannot be used.
+    -->
+    <uses-feature
+        android:name="android.software.live_wallpaper"
+        android:required="false" />
+
     <application
         android:label="Reup"
         android:icon="@mipmap/ic_launcher"
@@ -308,6 +317,26 @@
                 android:resource="@xml/reup_widget_info" />
         </receiver>
 
+        <!-- The round button on a note's corner, on the widget: takes the note
+             off. Not exported, for the reason DoneReceiver is not. -->
+        <receiver
+            android:name=".PeelReceiver"
+            android:exported="false" />
+
+        <!--
+          Writing a note, over the home screen: translucent, so the home screen
+          stays behind it; its own task and out of recents, so sticking a note
+          up does not bring the rest of the app forward. Not exported.
+        -->
+        <activity
+            android:name=".AddNoteActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="แปะโน้ต"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:windowSoftInputMode="adjustResize|stateVisible" />
+
         <!--
           Exported, because the sender is the system rather than this app. All
           three of these are protected broadcasts that only the OS is allowed to
@@ -337,5 +366,24 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!--
+          The wallpaper (ReupWallpaper.kt): the clip picked in Settings, playing
+          behind the home screen. Exported, as every wallpaper is, because the
+          system is what binds to it; BIND_WALLPAPER is a permission only the
+          system holds, so nothing else can.
+        -->
+        <service
+            android:name=".ReupWallpaper"
+            android:exported="true"
+            android:label="@string/wallpaper_name"
+            android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/reup_wallpaper" />
+        </service>
     </application>
 </manifest>

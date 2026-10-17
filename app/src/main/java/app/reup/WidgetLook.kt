@@ -10,9 +10,16 @@ import android.graphics.ImageDecoder
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import app.reup.core.InkMode
+import app.reup.core.PictureLight
+import app.reup.core.linear
+import app.reup.core.pictureLight
+import app.reup.core.pictureLightOf
+import app.reup.core.saved
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -41,12 +48,28 @@ import kotlin.math.roundToInt
  * picture is read once, scaled down, and kept as this app's own JPEG. The
  * original is not touched, and nothing leaves the phone.
  *
- * ─── WHY THE LIGHT IS NOT A VIDEO ───────────────────────────────────────────
+ * ─── WHAT MOVES ─────────────────────────────────────────────────────────────
  *
- * A widget cannot play one. What moves is a band of light drawn by the home
- * screen itself, a dozen frames across the card and then several seconds of
- * nothing, and nothing at all while the home screen is not on show. See
- * res/drawable/widget_shine.xml.
+ * A widget cannot play a clip or a GIF. A few seconds of one can be kept as a
+ * film instead - a flipbook the home screen turns itself, twelve pages a
+ * second - and then the picture is its first frame. See WidgetFilm and
+ * core/Film.kt. Without a film, what moves is a band of light drawn by the home
+ * screen, a dozen frames across the card and then several seconds of nothing;
+ * see res/drawable/widget_shine.xml. Either one stops while the home screen is
+ * not on show.
+ *
+ * ─── NO BACKGROUND AT ALL ───────────────────────────────────────────────────
+ *
+ * Clear: no card, no picture, a light shade behind the words and nothing else,
+ * for a moving wallpaper to be seen through it - the smooth way to have a clip
+ * behind the widget (WallClip says why).
+ *
+ * ─── NAMES IT DOES NOT SAY ──────────────────────────────────────────────────
+ *
+ * A home screen is read by whoever is next to the phone. A task can be marked
+ * to show on it as ส่วนตัว instead of its name, at its time as before. Kept
+ * on this phone only: it is about this phone's home screen, and a desk has its
+ * own.
  */
 object WidgetLook {
 
@@ -55,6 +78,24 @@ object WidgetLook {
     private const val KEY_MONEY = "money"
     /** When the kept picture was saved, which is also its version; 0 for none. */
     private const val KEY_PICTURE = "picture"
+    /** When the kept film was saved, likewise. Its first frame is the picture. */
+    internal const val KEY_FILM = "film"
+    /** How long a page of the film is, in ms. */
+    private const val KEY_FILM_TICK = "film_tick"
+    /** Tasks shown as ส่วนตัว, by id. */
+    private const val KEY_HIDDEN = "hidden"
+    /** No background of its own: the wallpaper shows through. */
+    private const val KEY_CLEAR = "clear"
+    /** Which way round the words go over a picture: auto, light or dark. */
+    private const val KEY_INK = "ink"
+    /** How bright the picture or film is, as "version|dark,mid,bright". See core/WidgetInk.kt. */
+    private const val KEY_LIGHT = "light"
+
+    /** Steps in the histogram a picture's light is measured with. */
+    private const val LIGHT_BINS = 64
+
+    /** What a task marked [Look.hidden] is called on the widget. */
+    const val HIDDEN_NAME = "ส่วนตัว"
 
     private const val DIR = "widget"
     private const val FILE = "picture.jpg"
@@ -71,15 +112,49 @@ object WidgetLook {
         val money: Boolean,
         /** 0 when there is no picture. */
         val picture: Long,
+        /** 0 when there is no film. With one, [picture] is its first frame. */
+        val film: Long = 0L,
+        /** How long a page of the film is, in ms. */
+        val filmTick: Long = 0L,
+        /** Tasks shown as [HIDDEN_NAME], by id. */
+        val hidden: Set<String> = emptySet(),
+        /**
+         * No card, picture or film behind the words, only a light shade: the
+         * wallpaper shows through. What the card would have been is kept for
+         * when this is turned off again.
+         */
+        val clear: Boolean = false,
+        /** White words, dark words, or whichever the picture needs less veil for. */
+        val ink: InkMode = InkMode.AUTO,
     )
 
     fun read(ctx: Context): Look {
         val p = prefs(ctx)
+        val picture = if (file(ctx).exists()) p.getLong(KEY_PICTURE, 0L) else 0L
         return Look(
             motion = p.getBoolean(KEY_MOTION, true),
             money = p.getBoolean(KEY_MONEY, false),
-            picture = if (file(ctx).exists()) p.getLong(KEY_PICTURE, 0L) else 0L,
+            picture = picture,
+            film = if (picture != 0L && WidgetFilm.exists(ctx)) p.getLong(KEY_FILM, 0L) else 0L,
+            filmTick = p.getLong(KEY_FILM_TICK, app.reup.core.FILM_TICK_OLD_MS),
+            hidden = p.getStringSet(KEY_HIDDEN, null)?.toSet() ?: emptySet(),
+            clear = p.getBoolean(KEY_CLEAR, false),
+            ink = when (p.getString(KEY_INK, null)) {
+                "light" -> InkMode.LIGHT
+                "dark" -> InkMode.DARK
+                else -> InkMode.AUTO
+            },
         )
+    }
+
+    fun setInk(ctx: Context, mode: InkMode) {
+        val word = when (mode) {
+            InkMode.LIGHT -> "light"
+            InkMode.DARK -> "dark"
+            InkMode.AUTO -> "auto"
+        }
+        prefs(ctx).edit().putString(KEY_INK, word).apply()
+        ReupWidget.redraw(ctx)
     }
 
     fun setMotion(ctx: Context, on: Boolean) {
@@ -92,10 +167,25 @@ object WidgetLook {
         ReupWidget.redraw(ctx)
     }
 
+    fun setClear(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean(KEY_CLEAR, on).apply()
+        ReupWidget.redraw(ctx)
+    }
+
+    /** The tasks shown as [HIDDEN_NAME], replacing the ones that were. */
+    fun setHidden(ctx: Context, ids: Set<String>) {
+        // A copy: the set handed to SharedPreferences must not change after.
+        prefs(ctx).edit().putStringSet(KEY_HIDDEN, HashSet(ids)).apply()
+        ReupWidget.redraw(ctx)
+    }
+
     // ── the picture ─────────────────────────────────────────────────────────
 
-    /** Kept as this app's own copy, replacing whatever was there. */
-    suspend fun keep(ctx: Context, picture: Bitmap) = withContext(Dispatchers.IO) {
+    /**
+     * Kept as this app's own copy, replacing whatever was there - a film too,
+     * unless [film] says this is the first frame of the one just kept.
+     */
+    suspend fun keep(ctx: Context, picture: Bitmap, film: Boolean = false) = withContext(Dispatchers.IO) {
         val dir = File(ctx.filesDir, DIR)
         if (!dir.exists() && !dir.mkdirs()) throw IOException("no room for the picture")
         // Written beside and then moved over, so a widget drawn halfway
@@ -105,16 +195,95 @@ object WidgetLook {
             if (!picture.compress(Bitmap.CompressFormat.JPEG, 90, out)) throw IOException("could not write the picture")
         }
         if (!part.renameTo(file(ctx))) throw IOException("could not keep the picture")
-        prefs(ctx).edit().putLong(KEY_PICTURE, System.currentTimeMillis()).apply()
+        val version = System.currentTimeMillis()
+        val edit = prefs(ctx).edit().putLong(KEY_PICTURE, version)
+        if (!film) {
+            edit.putLong(KEY_FILM, 0L)
+            WidgetFilm.drop(ctx)
+            // A film has its light measured over every frame by WidgetFilm.
+            lightOf(picture)?.let { edit.putString(KEY_LIGHT, "$version|" + it.saved()) }
+        }
+        edit.apply()
         forgetDrawn()
         ReupWidget.redraw(ctx)
     }
 
     fun forget(ctx: Context) {
         file(ctx).delete()
-        prefs(ctx).edit().putLong(KEY_PICTURE, 0L).apply()
+        prefs(ctx).edit().putLong(KEY_PICTURE, 0L).putLong(KEY_FILM, 0L).apply()
+        WidgetFilm.drop(ctx)
         forgetDrawn()
         ReupWidget.redraw(ctx)
+    }
+
+    /**
+     * A film just written by WidgetFilm, made the one the widget plays, with
+     * [light] measured over all of its frames. Its first frame is kept next, as
+     * the picture.
+     */
+    internal fun filmKept(ctx: Context, tickMs: Long, light: PictureLight?) {
+        val version = System.currentTimeMillis()
+        val edit = prefs(ctx).edit().putLong(KEY_FILM, version).putLong(KEY_FILM_TICK, tickMs)
+        if (light != null) edit.putString(KEY_LIGHT, "$version|" + light.saved())
+        edit.apply()
+    }
+
+    // ── how bright it is ────────────────────────────────────────────────────
+
+    /**
+     * How bright the picture or film of [version] is, for the veil and the
+     * colour of the words (core/WidgetInk.kt). Measured when it was kept; a
+     * picture kept before this was measured is measured now, once, from a
+     * small decode of the kept copy.
+     */
+    fun light(ctx: Context, version: Long): PictureLight? {
+        if (version == 0L) return null
+        val stored = prefs(ctx).getString(KEY_LIGHT, null)
+        if (stored != null && stored.substringBefore('|') == version.toString()) {
+            pictureLightOf(stored.substringAfter('|', ""))?.let { return it }
+        }
+        val small = try {
+            val opts = BitmapFactory.Options().apply { inSampleSize = 16 }
+            BitmapFactory.decodeFile(file(ctx).path, opts)
+        } catch (e: Exception) {
+            null
+        } ?: return null
+        val light = lightOf(small) ?: return null
+        prefs(ctx).edit().putString(KEY_LIGHT, "$version|" + light.saved()).apply()
+        return light
+    }
+
+    /** A new histogram for [addLight] to fill. */
+    internal fun newLight(): IntArray = IntArray(LIGHT_BINS)
+
+    /**
+     * [picture]'s pixels into [histogram], by luminance. A 48-pixel sketch of
+     * it is enough: what is asked is how bright its brightest tenth is, not
+     * where.
+     */
+    internal fun addLight(histogram: IntArray, picture: Bitmap) {
+        val w = 48
+        val h = max(1, (48f * picture.height / max(1, picture.width)).roundToInt()).coerceAtMost(96)
+        val sketch = try {
+            Bitmap.createScaledBitmap(picture, w, h, true)
+        } catch (e: Exception) {
+            return
+        }
+        val px = IntArray(w * h)
+        sketch.getPixels(px, 0, w, 0, 0, w, h)
+        if (sketch !== picture) sketch.recycle()
+        for (c in px) {
+            val l = 0.2126 * linear(Color.red(c) / 255.0) +
+                0.7152 * linear(Color.green(c) / 255.0) +
+                0.0722 * linear(Color.blue(c) / 255.0)
+            histogram[(l * histogram.size).toInt().coerceIn(0, histogram.size - 1)]++
+        }
+    }
+
+    private fun lightOf(picture: Bitmap): PictureLight? {
+        val h = newLight()
+        addLight(h, picture)
+        return pictureLight(h)
     }
 
     /**
@@ -156,6 +325,14 @@ object WidgetLook {
     fun isClip(ctx: Context, uri: Uri): Boolean =
         try {
             ctx.contentResolver.getType(uri)?.startsWith("video/") == true
+        } catch (e: Exception) {
+            false
+        }
+
+    /** Whether it is a GIF, which may be a film or may be one picture. */
+    fun isGif(ctx: Context, uri: Uri): Boolean =
+        try {
+            ctx.contentResolver.getType(uri) == "image/gif"
         } catch (e: Exception) {
             false
         }

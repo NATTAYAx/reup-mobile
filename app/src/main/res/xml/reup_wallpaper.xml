@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The wallpaper, as the system's list of moving wallpapers sees it: the app's
+  icon and a line saying where its clip comes from. ReupWallpaper.kt plays it.
+-->
+<wallpaper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/wallpaper_description"
+    android:thumbnail="@mipmap/ic_launcher" />

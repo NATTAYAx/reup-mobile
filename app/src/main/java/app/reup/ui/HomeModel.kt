@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import app.reup.BankNoticeListener
 import app.reup.BankNotices
 import app.reup.DeviceNotifyPrefs
+import app.reup.NoteUndo
 import app.reup.Notifications
 import app.reup.PendingIncome
 import app.reup.PendingSlip
@@ -26,6 +27,7 @@ import app.reup.homeRows
 import app.reup.core.Alarm
 import app.reup.core.DeviceNotify
 import app.reup.core.HomeRow
+import app.reup.core.Note
 import app.reup.core.QuietHours
 import app.reup.core.ScheduledTask
 import app.reup.core.SetupWarning
@@ -123,6 +125,10 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
 
     var themeId by mutableStateOf(Ui.themeId(ctx))
         private set
+
+    /** How every note's paper is drawn - bright, muted or dark. See core/Notes.kt. */
+    var noteStyle by mutableStateOf(Ui.noteStyle(ctx))
+        private set
     var now by mutableStateOf(Clock.System.now())
         private set
     var zone by mutableStateOf(TimeZone.currentSystemDefault())
@@ -171,6 +177,14 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
     var money by mutableStateOf(MoneyView())
         private set
 
+    /** The notes that are up, newest first. */
+    var notes by mutableStateOf<List<Note>>(emptyList())
+        private set
+
+    /** The note last taken off on this phone, while it can still be put back. See NoteUndo. */
+    var peeled by mutableStateOf<Note?>(null)
+        private set
+
     /** Slips that arrived on their own and are waiting for a yes or a no. */
     var slips by mutableStateOf<List<PendingSlip>>(emptyList())
         private set
@@ -197,6 +211,9 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
 
     /** The widget's settings and its frame picker. */
     val widget = WidgetModel(ctx, scope) { say(it) }
+
+    /** The moving wallpaper's clip, and whether it is set. Setting it clears the widget, once. */
+    val wall = WallModel(ctx, scope, say = { say(it) }, activated = { widget.wallpaperSet() })
 
     /** The tab the widget asked for, for the screen to go to once. */
     var tabAsk by mutableStateOf<TabAsk?>(null)
@@ -278,6 +295,8 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
         refreshWarnings()
         refreshSlips()
         widget.resume()
+        // After the widget: setting the wallpaper may change how it looks.
+        wall.resume()
         // The shade first: a notice posted while the listener was held back is
         // still there, and this is the moment that is never held back.
         BankNoticeListener.catchUp(ctx)
@@ -295,6 +314,7 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
             // Before syncing, because the row may have arrived on an earlier
             // run and this is the first build that knows to look at it.
             adoptTheme()
+            adoptNoteStyle()
             loadMoney()
             quietSync()
             catchUpSlips()
@@ -305,6 +325,7 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
         val repo = Repo.open(ctx)
         tasks = repo.tasks()
         infos = repo.infos()
+        readNotes()
         quiet = Repo.quietHours(ctx)
         backend = try {
             Repo.syncBackend(ctx)
@@ -323,6 +344,7 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
                 if (Repo.syncQuietly(ctx)) {
                     quietTicks = 0
                     adoptTheme()
+                    adoptNoteStyle()
                     Scheduler.reschedule(ctx)
                     read()
                     loadMoney()
@@ -384,6 +406,59 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
             if (wrote) {
                 quietTicks = 0
                 quietSync()
+            }
+        }
+    }
+
+    // ── notes ───────────────────────────────────────────────────────────────
+
+    /** A note that will not read costs the board, not the tab. */
+    private suspend fun readNotes() {
+        notes = try {
+            Repo.notes(ctx).live()
+        } catch (e: Exception) {
+            emptyList()
+        }
+        peeled = NoteUndo.recent(ctx)?.takeIf { p -> notes.none { it.uid == p.uid } }
+    }
+
+    /**
+     * Off the board and off the widget, with the words kept for the undo -
+     * the same as the button on the widget does, through the same two calls.
+     */
+    fun peelNote(note: Note) {
+        // Off the board at once, before the database has answered; the read
+        // after the write says what is really up, and puts it back if it did
+        // not come off.
+        notes = notes.filterNot { it.uid == note.uid }
+        scope.launch {
+            try {
+                val was = Repo.notes(ctx).peel(note.uid)
+                if (was != null) NoteUndo.keep(ctx, was)
+                readNotes()
+                ReupWidget.redraw(ctx)
+                notice = Notice(text = "แกะแล้ว", action = "เอาคืน", onAction = { unpeelNote(was ?: note) })
+                quietTicks = 0
+                quietSync()
+            } catch (e: Exception) {
+                readNotes()
+                notice = Notice("แกะไม่ได้ " + (e.message ?: e.toString()))
+            }
+        }
+    }
+
+    /** Back up, with the words this phone kept when it came off. */
+    fun unpeelNote(note: Note) {
+        scope.launch {
+            try {
+                Repo.notes(ctx).unpeel(note)
+                NoteUndo.clear(ctx)
+                readNotes()
+                ReupWidget.redraw(ctx)
+                quietTicks = 0
+                quietSync()
+            } catch (e: Exception) {
+                notice = Notice("เอาคืนไม่ได้ " + (e.message ?: e.toString()))
             }
         }
     }
@@ -462,6 +537,35 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
         try {
             if (Ui.adopt(ctx, Repo.themeId(ctx))) {
                 themeId = Ui.themeId(ctx)
+                ReupWidget.redraw(ctx)
+            }
+        } catch (e: Exception) {
+            // Stays as it is.
+        }
+    }
+
+    // ── the note paper ──────────────────────────────────────────────────────
+
+    /** As setTheme: here first, then the widget, then the row the desktop reads. */
+    fun pickNoteStyle(style: String) {
+        if (style == noteStyle) return
+        Ui.setNoteStyle(ctx, style)
+        noteStyle = Ui.noteStyle(ctx)
+        ReupWidget.redraw(ctx)
+        scope.launch {
+            try {
+                Repo.setNoteStyle(ctx, noteStyle)
+            } catch (e: Exception) {
+                // As with the theme: the next pick writes the row again.
+            }
+        }
+    }
+
+    /** Follow a style picked on the desktop. Names this build does not know are left alone. */
+    private suspend fun adoptNoteStyle() {
+        try {
+            if (Ui.adoptNoteStyle(ctx, Repo.noteStyle(ctx))) {
+                noteStyle = Ui.noteStyle(ctx)
                 ReupWidget.redraw(ctx)
             }
         } catch (e: Exception) {

@@ -55,6 +55,7 @@ fun homeRows(
             category = info?.category,
             recurring = recurs(task.spec),
             longCycle = longCycle(task.spec),
+            createdAt = info?.createdAt,
         )
     }
 }

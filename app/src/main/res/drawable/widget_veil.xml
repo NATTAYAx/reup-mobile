@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The veil between a picture and the words on it: white, made black or left
+  white and given its opacity by ReupWidget, from how bright the picture is
+  (core/WidgetInk.kt). One flat sheet rather than a gradient, because the
+  words cover the whole card and every one of them has to clear the same bar.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/widget_radius" />
+    <solid android:color="#FFFFFFFF" />
+</shape>
