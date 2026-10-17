@@ -1,39 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  One row under the card: a name, and when. ReupWidget.lines adds one of these
-  per row, and works out how many fit from its height - 3dp of padding and a
-  line of 13sp text.
+  One row of the widget's list, the way the desktop's board writes it: the
+  time first, in a column of its own whose width ReupWidget measures for the
+  list it is in, so every name below starts at the same place; then the name.
+  A row in a ListView or added by hand to w_rows before Android 12 - the same
+  row either way.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_item"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingTop="3dp">
-
-    <TextView
-        android:id="@+id/w_line_name"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:shadowColor="#59000000"
-        android:shadowDy="1"
-        android:shadowRadius="4"
-        android:textColor="#E8E8EA"
-        android:textSize="13sp" />
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
 
     <TextView
         android:id="@+id/w_line_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
         android:fontFeatureSettings="tnum"
+        android:gravity="end"
         android:maxLines="1"
-        android:shadowColor="#59000000"
+        android:minWidth="44dp"
+        android:shadowColor="#40000000"
         android:shadowDy="1"
-        android:shadowRadius="4"
-        android:textColor="#9CA3AF"
-        android:textSize="12sp" />
+        android:shadowRadius="3"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/w_line_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:shadowColor="#40000000"
+        android:shadowDy="1"
+        android:shadowRadius="3"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp" />
 </LinearLayout>

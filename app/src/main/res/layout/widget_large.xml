@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Four by four, or anything at least that tall: the clock, what is next, the
-  day's bar, the rounds within the day, and then what is still open further
-  out - weeklies, events - by when they run out. How many rows of each is
-  worked out from the height (ReupWidget.large), so a row is never cut in
-  half. See widget_small.xml for the layers behind the words.
+  Four by four, or anything at least that tall, laid out the way the desktop's
+  board is: the clock, the date, the notes stuck on it, what is next in large
+  type with its time under it, and then one list - the rest of the day under a
+  heading per day, the day's bar, the longer rounds, the month's money - with
+  the time in its own column and the name after it.
+
+  The list is a ListView from Android 12, filled with the rows themselves
+  (ReupWidget.list), so it takes exactly the height the home screen gives
+  it rather than a height worked out beforehand: a home screen that says the
+  widget is shorter than it is no longer leaves the bottom third empty, and one
+  that is too short fades the last row out instead of cutting it in half.
+  Before Android 12, w_rows takes a counted number of the same rows.
+
+  See widget_small.xml for the layers behind the words.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@android:id/background"
@@ -29,6 +38,18 @@
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
+    <!--
+      Where the film goes, when there is one: see widget_film.xml. A stub until
+      then, because a flipper keeps its timer running whether or not it has
+      anything to show, and a widget without a film should not tick.
+    -->
+    <ViewStub
+        android:id="@+id/w_film_stub"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:inflatedId="@+id/w_film"
+        android:layout="@layout/widget_film" />
+
     <ImageView
         android:id="@+id/w_glow"
         android:layout_width="match_parent"
@@ -46,12 +67,12 @@
         android:src="@drawable/widget_glow_end" />
 
     <ImageView
-        android:id="@+id/w_scrim"
+        android:id="@+id/w_veil"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:importantForAccessibility="no"
         android:scaleType="fitXY"
-        android:src="@drawable/widget_scrim"
+        android:src="@drawable/widget_veil"
         android:visibility="gone" />
 
     <!-- The light. A progress bar because that is what a widget may animate; see widget_shine.xml. -->
@@ -72,7 +93,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingStart="18dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="10dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -82,26 +106,32 @@
 
             <TextClock
                 android:id="@+id/w_clock"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:fontFamily="sans-serif-light"
+                android:fontFamily="sans-serif"
                 android:fontFeatureSettings="tnum"
                 android:format12Hour="HH:mm"
                 android:format24Hour="HH:mm"
                 android:includeFontPadding="false"
+                android:letterSpacing="-0.02"
                 android:maxLines="1"
-                android:shadowColor="#66000000"
+                android:shadowColor="#4D000000"
                 android:shadowDy="1"
-                android:shadowRadius="6"
-                android:textColor="#E8E8EA"
-                android:textSize="40sp" />
+                android:shadowRadius="4"
+                android:textColor="#FFFFFF"
+                android:textSize="46sp" />
+
+            <!-- Room, pushed between. A FrameLayout: a widget may not hold a plain View or a Space. -->
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
 
             <ImageView
                 android:id="@+id/w_moon"
                 android:layout_width="16dp"
                 android:layout_height="16dp"
-                android:layout_marginStart="6dp"
+                android:layout_marginEnd="8dp"
                 android:contentDescription="ช่วงเงียบ"
                 android:src="@drawable/ic_moon"
                 android:visibility="gone" />
@@ -110,20 +140,20 @@
                 android:id="@+id/w_wait"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginEnd="8dp"
                 android:background="@drawable/widget_pill"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="7dp"
-                android:paddingTop="3dp"
-                android:paddingEnd="8dp"
-                android:paddingBottom="3dp"
+                android:paddingStart="8dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="9dp"
+                android:paddingBottom="4dp"
                 android:visibility="gone">
 
                 <ImageView
                     android:id="@+id/w_wait_icon"
-                    android:layout_width="12dp"
-                    android:layout_height="12dp"
+                    android:layout_width="13dp"
+                    android:layout_height="13dp"
                     android:importantForAccessibility="no"
                     android:src="@drawable/ic_wallet" />
 
@@ -131,173 +161,124 @@
                     android:id="@+id/w_wait_count"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="5dp"
+                    android:fontFamily="sans-serif-medium"
                     android:fontFeatureSettings="tnum"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#A78BFA"
-                    android:textSize="11sp" />
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp" />
             </LinearLayout>
+
+            <ImageView
+                android:id="@+id/w_add"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/widget_add_light"
+                android:contentDescription="แปะโน้ต"
+                android:padding="8dp"
+                android:src="@drawable/ic_note_add" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/w_date"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
             android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
             android:maxLines="1"
-            android:shadowColor="#59000000"
+            android:shadowColor="#40000000"
             android:shadowDy="1"
-            android:shadowRadius="4"
+            android:shadowRadius="3"
             android:text="วันนี้"
-            android:textColor="#9CA3AF"
-            android:textSize="13sp" />
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+        <!-- The notes, as ReupWidget.notes adds them: widget_note.xml each, and widget_more.xml after. -->
+        <LinearLayout
+            android:id="@+id/w_notes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="-7dp"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/w_head"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/widget_panel"
-            android:orientation="vertical"
-            android:paddingStart="12dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="10dp">
+            android:layout_marginTop="8dp"
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/w_head_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
                 android:maxLines="1"
                 android:text="ถัดไป"
-                android:textColor="#A78BFA"
-                android:textSize="11sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:baselineAligned="true"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/w_head_name"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:shadowColor="#59000000"
-                    android:shadowDy="1"
-                    android:shadowRadius="4"
-                    android:text="งานถัดไป"
-                    android:textColor="#E8E8EA"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:id="@+id/w_head_time"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:fontFeatureSettings="tnum"
-                    android:maxLines="1"
-                    android:text="18:00"
-                    android:textColor="#A78BFA"
-                    android:textSize="14sp" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/w_progress"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
-
-            <FrameLayout
-                android:id="@+id/w_bar"
-                android:layout_width="0dp"
-                android:layout_height="5dp"
-                android:layout_marginEnd="10dp"
-                android:layout_weight="1">
-
-                <ImageView
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:importantForAccessibility="no"
-                    android:scaleType="fitXY"
-                    android:src="@drawable/widget_bar_track" />
-
-                <ImageView
-                    android:id="@+id/w_bar_fill"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:importantForAccessibility="no"
-                    android:scaleType="fitXY"
-                    android:src="@drawable/widget_bar_fill" />
-            </FrameLayout>
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
             <TextView
-                android:id="@+id/w_count"
-                android:layout_width="wrap_content"
+                android:id="@+id/w_head_name"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFeatureSettings="tnum"
-                android:maxLines="1"
-                android:shadowColor="#59000000"
+                android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:shadowColor="#4D000000"
                 android:shadowDy="1"
                 android:shadowRadius="4"
-                android:text="ทำแล้ว 2 จาก 5"
-                android:textColor="#9CA3AF"
-                android:textSize="12sp" />
+                android:text="งานถัดไป"
+                android:textColor="#FFFFFF"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/w_head_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:fontFeatureSettings="tnum"
+                android:maxLines="1"
+                android:shadowColor="#40000000"
+                android:shadowDy="1"
+                android:shadowRadius="3"
+                android:text="18:00"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/w_soon"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:orientation="vertical"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/w_later_label"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:maxLines="1"
-            android:text="รอบยาวที่ยังไม่ทำ"
-            android:textColor="#9CA3AF"
-            android:textSize="11sp"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/w_later"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="0dp"
-            android:orientation="vertical"
-            android:visibility="gone" />
-
-        <!-- Room, pushed to the bottom. A FrameLayout: a widget may not hold a plain View or a Space. -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_marginTop="8dp"
+            android:layout_weight="1">
 
-        <TextView
-            android:id="@+id/w_money"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:ellipsize="end"
-            android:fontFeatureSettings="tnum"
-            android:maxLines="1"
-            android:textColor="#9CA3AF"
-            android:textSize="12sp"
-            android:visibility="gone" />
+            <ListView
+                android:id="@+id/w_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:divider="@null"
+                android:dividerHeight="0dp"
+                android:fadingEdgeLength="28dp"
+                android:listSelector="@android:color/transparent"
+                android:requiresFadingEdge="vertical"
+                android:scrollbars="none"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/w_rows"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+        </FrameLayout>
     </LinearLayout>
 </FrameLayout>

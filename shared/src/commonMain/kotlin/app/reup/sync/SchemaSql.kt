@@ -281,6 +281,34 @@ const val SCHEMA_SQL: String =
     ");\n" +
     "-- @@\n" +
     "\n" +
+    "-- \u2500\u2500\u2500 notes \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n" +
+    "-- What somebody sticks on the home screen so as not to forget it, the way a\n" +
+    "-- note goes on a fridge door: a line or two in their own words, with no cycle,\n" +
+    "-- no time, no category and nothing counting how long it has been there.\n" +
+    "--\n" +
+    "-- WHY IT IS NOT A KIND OF TASK\n" +
+    "--\n" +
+    "-- A task has a schedule, and everything the app does with a task - the alarm,\n" +
+    "-- the countdown, the tick, the history - starts from that schedule. A note has\n" +
+    "-- none of it, and a task with every field blank would be read by all of that\n" +
+    "-- code as a task somebody forgot to fill in. The one thing a note does is stay\n" +
+    "-- where it can be seen until it is taken off.\n" +
+    "--\n" +
+    "-- Taking it off is the tombstone the sync migrations add, and nothing else: no\n" +
+    "-- \"peeled at\", no record that it existed. A note that is gone is gone, the same\n" +
+    "-- on both machines.\n" +
+    "--\n" +
+    "-- `body` is what was typed, trimmed and nothing more. `color` is the paper, one\n" +
+    "-- of the names in notes.ts / Notes.kt; one this version has never heard of is\n" +
+    "-- drawn as the first, rather than refused.\n" +
+    "CREATE TABLE IF NOT EXISTS notes (\n" +
+    "  id          INTEGER PRIMARY KEY AUTOINCREMENT,\n" +
+    "  body        TEXT NOT NULL,\n" +
+    "  color       TEXT NOT NULL DEFAULT 'yellow',\n" +
+    "  created_at  TEXT DEFAULT (datetime('now'))\n" +
+    ");\n" +
+    "-- @@\n" +
+    "\n" +
     "-- \u2500\u2500\u2500 migrations \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n" +
     "--\n" +
     "-- Everything below is an ALTER that must survive being run again. SQLite has no\n" +

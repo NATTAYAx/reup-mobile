@@ -104,7 +104,10 @@ fun widgetFace(rows: List<HomeRow>, now: Instant, zone: TimeZone, quiet: QuietHo
         val at = r.fireAt
         if (!r.done && at != null) waiting.add(r to at)
     }
-    waiting.sortBy { it.second }
+    // Rounds due at one moment, oldest task first: the order the desktop's
+    // board names them in, so the two screens lead with the same name. Rows
+    // without a date keep the order they came in, since the sort is stable.
+    waiting.sortWith(compareBy({ it.second }, { it.first.createdAt ?: "" }))
 
     val within = waiting.filter { it.second - now <= day }
     val nextPair = within.firstOrNull()
@@ -149,6 +152,142 @@ fun widgetTally(done: Int, load: Int): List<String> = when {
     load <= 0 -> emptyList()
     done <= 0 -> listOf("$load อย่าง", "$load อย่างใน 24 ชม.", "$load อย่างภายใน 24 ชั่วโมง")
     else -> listOf("$done/$load", "ทำแล้ว $done/$load", "ทำแล้ว $done จาก $load")
+}
+
+/** Rounds that come due at the same moment, said as one line. */
+data class WidgetGroup(
+    /** In the order they came, which for a moment shared is the Today tab's. */
+    val names: List<String>,
+    /** When, said as short as the line above allows: "05:00" under "พรุ่งนี้ 04:00". */
+    val time: String,
+    /** Any one of them in amber. */
+    val warn: Boolean,
+)
+
+/** The widget's rows, gathered by the moment they come due. */
+data class WidgetSchedule(
+    /** On the card: every round due at the soonest moment within a day. Null on a calm day. */
+    val head: WidgetGroup?,
+    /** The rest of the day, a line for each moment. */
+    val soon: List<WidgetGroup>,
+    /** What is further out, a line for each moment one runs out. */
+    val later: List<WidgetGroup>,
+)
+
+/**
+ * [face] gathered into lines, a line for each moment rather than for each round.
+ *
+ * WHY
+ *
+ * Games of one region reset together, and a phone's column is narrow. "พรุ่งนี้
+ * 04:00" three times over, under each of three names, said one thing and took
+ * the room of three; now it is one line that names all three, and the rows it
+ * frees show the rest of the day. The card does the same: when several rounds
+ * come due at the soonest moment, all of them are what is next.
+ *
+ * Down the list of the day, the day is said once: under "พรุ่งนี้ 04:00" the
+ * next line is "05:00". It is not dropped from the first line, which sits
+ * under a card of its own, nor from what is further out, which is a list of
+ * different days.
+ */
+fun widgetSchedule(face: WidgetFace): WidgetSchedule {
+    val next = face.next
+    var soon = face.soon
+    val head = next?.let { first ->
+        val same = soon.takeWhile { it.time == first.time }
+        soon = soon.drop(same.size)
+        WidgetGroup(listOf(first.name) + same.map { it.name }, first.time, first.warn || same.any { it.warn })
+    }
+    return WidgetSchedule(head, gather(soon, dayOnce = true), gather(face.later, dayOnce = false))
+}
+
+/** One line of the widget's list, laid out the way the desktop's board lays its list out. */
+sealed interface WidgetItem {
+    /** The day the rows under it share ("พรุ่งนี้"), or the longer rounds' heading. */
+    data class Heading(val text: String) : WidgetItem
+
+    /**
+     * When, then what. [time] is a bare clock under a day's heading; a longer
+     * round keeps its whole phrase ("หมด อา. 18:00"), since each is a different
+     * day. [later] says which of the two lists it is in, for the width of the
+     * time column, which each list measures for itself.
+     */
+    data class Row(val time: String, val names: List<String>, val warn: Boolean, val later: Boolean) : WidgetItem
+
+    /** The day's bar: [words] beside it, filled [done] of [load], and only words until something is ticked. */
+    data class Tally(val words: String, val done: Int, val load: Int) : WidgetItem
+
+    /** The month's money, when the widget has been asked to show it. */
+    data class Money(val text: String) : WidgetItem
+}
+
+/** The heading over the rounds further out than a day. The desktop's widget.later says the same. */
+const val WIDGET_LATER_HEADING: String = "รอบยาวที่ยังไม่ทำ"
+
+/**
+ * The list under the card, in the desktop board's order: the rest of the day,
+ * with a heading for each day the rows fall on after today and bare clocks
+ * under it; then the day's bar; then the longer rounds under their heading;
+ * then the month's money.
+ *
+ * The card's own moment is left out, as it is in [widgetSchedule]. Rounds that
+ * share a moment are one row naming all of them.
+ */
+fun widgetItems(face: WidgetFace, tally: String?, money: String?): List<WidgetItem> {
+    val out = ArrayList<WidgetItem>()
+    val head = face.next
+    val soon = if (head == null) face.soon else face.soon.dropWhile { it.time == head.time }
+    var lastDay: String? = null
+    for (g in gather(soon, dayOnce = false)) {
+        val (day, clock) = splitWhen(g.time)
+        if (day != null && clock.isNotEmpty()) {
+            if (day != lastDay) out.add(WidgetItem.Heading(day))
+            lastDay = day
+            out.add(WidgetItem.Row(clock, g.names, g.warn, later = false))
+        } else {
+            out.add(WidgetItem.Row(g.time, g.names, g.warn, later = false))
+        }
+    }
+    if (tally != null) out.add(WidgetItem.Tally(tally, face.done, face.load))
+    val later = gather(face.later, dayOnce = false)
+    if (later.isNotEmpty()) {
+        out.add(WidgetItem.Heading(WIDGET_LATER_HEADING))
+        for (g in later) out.add(WidgetItem.Row(g.time, g.names, g.warn, later = true))
+    }
+    if (money != null) out.add(WidgetItem.Money(money))
+    return out
+}
+
+/** Lines in a row with the same time, as one. */
+private fun gather(lines: List<WidgetLine>, dayOnce: Boolean): List<WidgetGroup> {
+    val out = ArrayList<WidgetGroup>()
+    var lastDay: String? = null
+    var i = 0
+    while (i < lines.size) {
+        val time = lines[i].time
+        var j = i
+        while (j < lines.size && lines[j].time == time) j++
+        val run = lines.subList(i, j)
+        val (day, clock) = splitWhen(time)
+        val said = if (dayOnce && out.isNotEmpty() && day != null && day == lastDay && clock.isNotEmpty()) clock else time
+        out.add(WidgetGroup(run.map { it.name }, said, run.any { it.warn }))
+        lastDay = day
+        i = j
+    }
+    return out
+}
+
+/**
+ * "พรุ่งนี้ 04:00" as the day and the clock; "18:00" as no day and the clock.
+ * Anything not ending in a clock - "22 ต.ค." - is all day and no clock, and
+ * is never shortened.
+ */
+private fun splitWhen(time: String): Pair<String?, String> {
+    val space = time.lastIndexOf(' ')
+    val last = time.substring(space + 1)
+    val isClock = last.length in 4..5 && last[last.length - 3] == ':' && last.all { it.isDigit() || it == ':' }
+    if (!isClock) return time to ""
+    return (if (space > 0) time.substring(0, space) else null) to last
 }
 
 private fun lineOf(r: HomeRow, at: Instant, now: Instant, zone: TimeZone, ending: Boolean): WidgetLine {

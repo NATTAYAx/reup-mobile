@@ -59,6 +59,13 @@ const val KEY_LANG = "gamesched_lang_v1"
 const val KEY_THEME = "gamesched_theme_id_v1"
 
 /**
+ * How notes look: bright, muted or dark paper, as core/Notes.kt names them.
+ * Synced, like the theme, and read the same way - a name this build does not
+ * know leaves this phone as it is (Ui.adoptNoteStyle).
+ */
+const val KEY_NOTE_STYLE = "gamesched_note_style_v1"
+
+/**
  * The write both machines make into user_settings.
  *
  * The WHERE is the part that matters. Without it, storing a value that is
@@ -68,8 +75,8 @@ const val KEY_THEME = "gamesched_theme_id_v1"
  */
 const val SETTING_UPSERT_SQL =
     "INSERT INTO user_settings (key, value) VALUES (?, ?) " +
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value " +
-            "WHERE user_settings.value IS NOT excluded.value"
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value " +
+        "WHERE user_settings.value IS NOT excluded.value"
 
 /**
  * One live setting by name.
@@ -152,4 +159,5 @@ object UserSettings {
     const val CURRENCY = KEY_CURRENCY
     const val LANG = KEY_LANG
     const val THEME = KEY_THEME
+    const val NOTE_STYLE = KEY_NOTE_STYLE
 }

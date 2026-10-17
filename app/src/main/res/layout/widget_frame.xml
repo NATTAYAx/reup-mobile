@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One frame of the film, inside w_film. ReupWidget adds one of these per tick
+  of the loop, with the frame's picture; a tick that shows a picture again is
+  handed the same one, which the system sends once.
+-->
+<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_frame"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="centerCrop" />

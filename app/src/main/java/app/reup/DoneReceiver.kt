@@ -79,6 +79,16 @@ class DoneReceiver : BroadcastReceiver() {
 
             Scheduler.reschedule(context)
 
+            // Drawn here as well as asked for. The redraw reschedule asks for
+            // is a broadcast to this app, and the system holds it until this
+            // receiver is done - after the sync below - so for those seconds
+            // the widget still showed the task as not done.
+            try {
+                ReupWidget.draw(context)
+            } catch (e: Exception) {
+                Log.i(TAG, "the widget will catch up on its next redraw: ${e.message}")
+            }
+
             try {
                 withTimeout(6_000) { Repo.syncQuietly(context) }
             } catch (e: Exception) {

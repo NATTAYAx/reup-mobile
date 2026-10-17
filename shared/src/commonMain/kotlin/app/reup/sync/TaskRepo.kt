@@ -137,6 +137,8 @@ data class TaskInfo(
     val completedUntil: String?,
     /** When the tick was made, which is what "ticked today" is about. */
     val completedAt: String?,
+    /** When the task was made, for naming rounds that share a moment in one order everywhere. */
+    val createdAt: String? = null,
 )
 
 /** A row as a card needs it, keyed by uid. Null without a uid, like the others. */
@@ -147,6 +149,7 @@ fun taskInfoFrom(r: DbRow): Pair<String, TaskInfo>? {
         category = text(r, "category")?.takeIf { it.isNotBlank() },
         completedUntil = text(r, "completed_until")?.takeIf { it.isNotBlank() },
         completedAt = text(r, "completed_at")?.takeIf { it.isNotBlank() },
+        createdAt = text(r, "created_at")?.takeIf { it.isNotBlank() },
     )
 }
 
@@ -360,6 +363,20 @@ class TaskRepo(private val db: Db) {
      */
     suspend fun setThemeId(id: String) {
         db.execute(SETTING_UPSERT_SQL, listOf(SyncValue.Text(UserSettings.THEME), SyncValue.Text(id)))
+    }
+
+    /**
+     * How notes look, as stored on either machine, or null for not picked yet.
+     * Read like the theme: which names are real is core/Notes.kt's business,
+     * and what to do with one this build does not know is Ui.adoptNoteStyle's.
+     */
+    suspend fun noteStyle(): String? =
+        db.select(userSettingSql(), listOf(SyncValue.Text(UserSettings.NOTE_STYLE)))
+            .firstOrNull()?.let { text(it, "value") }
+
+    /** Say how notes look, for the other machine. */
+    suspend fun setNoteStyle(style: String) {
+        db.execute(SETTING_UPSERT_SQL, listOf(SyncValue.Text(UserSettings.NOTE_STYLE), SyncValue.Text(style)))
     }
 
     /** uid to completed_until, for drawing which rows are already ticked. */

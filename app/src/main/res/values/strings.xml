@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-      The only string here. Every other word in this app is written in the
-      Kotlin (LATER.md says why); this one is read by the home screen's widget
-      list, which can only take it from a resource.
+      The only strings here. Every other word in this app is written in the
+      Kotlin (LATER.md says why); these are read by the home screen's list of
+      widgets and the system's list of wallpapers, which can only take them
+      from resources.
     -->
     <string name="widget_description">เวลา งานถัดไป และสิ่งที่ยังไม่ทำ บนหน้าจอหลัก</string>
+    <string name="wallpaper_name">Reup คลิป</string>
+    <string name="wallpaper_description">คลิปที่เลือกไว้ในแอป Reup เล่นวนเป็นวอลเปเปอร์ เปลี่ยนคลิปได้ที่ ตั้งค่า → วอลเปเปอร์ ในแอป</string>
 </resources>

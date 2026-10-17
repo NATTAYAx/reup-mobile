@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The month's money, last in the widget's list, when the widget has been asked to show it. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_item"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:ellipsize="end"
+    android:fontFeatureSettings="tnum"
+    android:maxLines="1"
+    android:paddingTop="8dp"
+    android:paddingBottom="2dp"
+    android:shadowColor="#40000000"
+    android:shadowDy="1"
+    android:shadowRadius="3"
+    android:textColor="#FFFFFF"
+    android:textSize="13sp" />

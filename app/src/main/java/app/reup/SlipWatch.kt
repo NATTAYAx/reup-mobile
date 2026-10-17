@@ -15,6 +15,7 @@ import android.provider.MediaStore
 import android.util.Log
 import app.reup.core.expenseLabel
 import app.reup.sync.memoCategory
+import app.reup.sync.shopCategory
 import app.reup.sync.slipDraft
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -383,6 +384,10 @@ object SlipWatch {
         var split = memoCategory(reading.memo, categories)
         if (split.category == null && split.note.isNotEmpty()) {
             split = split.copy(category = repo.categoryUsedFor(split.note))
+        }
+        // No memo at all: what the shop sells, where the slip prints it.
+        if (split.category == null && reading.memo == null) {
+            split = split.copy(category = shopCategory(text, categories))
         }
         val zone = TimeZone.currentSystemDefault()
         val savedAt = Instant.fromEpochSeconds(p.addedAt).toLocalDateTime(zone)

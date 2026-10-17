@@ -58,6 +58,7 @@ val SYNCED_TABLES = listOf(
     "expected_income",
     "task_events",
     "user_settings",
+    "notes",
 )
 
 class SqlLocalStore private constructor(

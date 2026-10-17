@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Two cells square: the clock, the date, what is next, and the bar.
+  Two cells square: the clock and the date, then the newest note when there is
+  one - a note is what somebody stuck up so as not to forget it, and it goes
+  first - and otherwise what is next and the day's bar.
 
   Every size has the same layers behind the words and the same ids, so
   ReupWidget draws them all with one set of calls: the card, the picture
   over it, two washes of the theme's colours when there is no picture, a
-  scrim when there is, and the light, under the words so they stay sharp.
+  veil when there is, and the light, under the words so they stay sharp.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@android:id/background"
@@ -30,6 +32,18 @@
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
+    <!--
+      Where the film goes, when there is one: see widget_film.xml. A stub until
+      then, because a flipper keeps its timer running whether or not it has
+      anything to show, and a widget without a film should not tick.
+    -->
+    <ViewStub
+        android:id="@+id/w_film_stub"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:inflatedId="@+id/w_film"
+        android:layout="@layout/widget_film" />
+
     <ImageView
         android:id="@+id/w_glow"
         android:layout_width="match_parent"
@@ -47,12 +61,12 @@
         android:src="@drawable/widget_glow_end" />
 
     <ImageView
-        android:id="@+id/w_scrim"
+        android:id="@+id/w_veil"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:importantForAccessibility="no"
         android:scaleType="fitXY"
-        android:src="@drawable/widget_scrim"
+        android:src="@drawable/widget_veil"
         android:visibility="gone" />
 
     <!-- The light. A progress bar because that is what a widget may animate; see widget_shine.xml. -->
@@ -73,7 +87,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:paddingStart="13dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="11dp"
+        android:paddingBottom="10dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -86,23 +103,24 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:fontFamily="sans-serif-light"
+                android:fontFamily="sans-serif"
                 android:fontFeatureSettings="tnum"
                 android:format12Hour="HH:mm"
                 android:format24Hour="HH:mm"
                 android:includeFontPadding="false"
+                android:letterSpacing="-0.02"
                 android:maxLines="1"
-                android:shadowColor="#66000000"
+                android:shadowColor="#4D000000"
                 android:shadowDy="1"
-                android:shadowRadius="6"
-                android:textColor="#E8E8EA"
+                android:shadowRadius="4"
+                android:textColor="#FFFFFF"
                 android:textSize="32sp" />
 
             <ImageView
                 android:id="@+id/w_moon"
                 android:layout_width="14dp"
                 android:layout_height="14dp"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:contentDescription="ช่วงเงียบ"
                 android:src="@drawable/ic_moon"
                 android:visibility="gone" />
@@ -111,20 +129,20 @@
                 android:id="@+id/w_wait"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:background="@drawable/widget_pill"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="7dp"
+                android:paddingStart="6dp"
                 android:paddingTop="3dp"
-                android:paddingEnd="8dp"
+                android:paddingEnd="7dp"
                 android:paddingBottom="3dp"
                 android:visibility="gone">
 
                 <ImageView
                     android:id="@+id/w_wait_icon"
-                    android:layout_width="12dp"
-                    android:layout_height="12dp"
+                    android:layout_width="11dp"
+                    android:layout_height="11dp"
                     android:importantForAccessibility="no"
                     android:src="@drawable/ic_wallet" />
 
@@ -132,11 +150,12 @@
                     android:id="@+id/w_wait_count"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="3dp"
+                    android:fontFamily="sans-serif-medium"
                     android:fontFeatureSettings="tnum"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#A78BFA"
+                    android:textColor="#FFFFFF"
                     android:textSize="11sp" />
             </LinearLayout>
         </LinearLayout>
@@ -146,67 +165,81 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
             android:maxLines="1"
-            android:shadowColor="#59000000"
+            android:shadowColor="#40000000"
             android:shadowDy="1"
-            android:shadowRadius="4"
+            android:shadowRadius="3"
             android:text="วันนี้"
-            android:textColor="#9CA3AF"
+            android:textColor="#FFFFFF"
             android:textSize="12sp" />
 
-        <!-- Room, pushed to the bottom. A FrameLayout: a widget may not hold a plain View or a Space. -->
+        <LinearLayout
+            android:id="@+id/w_notes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="-7dp"
+            android:layout_marginTop="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/w_head"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/w_head_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="ถัดไป"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/w_head_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:shadowColor="#4D000000"
+                android:shadowDy="1"
+                android:shadowRadius="4"
+                android:text="งานถัดไป"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/w_head_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFeatureSettings="tnum"
+                android:maxLines="1"
+                android:shadowColor="#40000000"
+                android:shadowDy="1"
+                android:shadowRadius="3"
+                android:text="18:00"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/w_head_label"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="ถัดไป"
-                android:textColor="#A78BFA"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/w_head_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:fontFeatureSettings="tnum"
-                android:maxLines="1"
-                android:text="18:00"
-                android:textColor="#A78BFA"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/w_head_name"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:shadowColor="#59000000"
-            android:shadowDy="1"
-            android:shadowRadius="4"
-            android:text="งานถัดไป"
-            android:textColor="#E8E8EA"
-            android:textSize="14sp" />
-
-        <LinearLayout
             android:id="@+id/w_progress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:visibility="gone">
@@ -215,10 +248,11 @@
                 android:id="@+id/w_bar"
                 android:layout_width="0dp"
                 android:layout_height="4dp"
-                android:layout_marginEnd="10dp"
+                android:layout_marginEnd="8dp"
                 android:layout_weight="1">
 
                 <ImageView
+                    android:id="@+id/w_bar_track"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:importantForAccessibility="no"
@@ -238,13 +272,14 @@
                 android:id="@+id/w_count"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
                 android:fontFeatureSettings="tnum"
                 android:maxLines="1"
-                android:shadowColor="#59000000"
+                android:shadowColor="#40000000"
                 android:shadowDy="1"
-                android:shadowRadius="4"
+                android:shadowRadius="3"
                 android:text="2/5"
-                android:textColor="#9CA3AF"
+                android:textColor="#FFFFFF"
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>

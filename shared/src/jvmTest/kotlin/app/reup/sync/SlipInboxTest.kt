@@ -400,6 +400,71 @@ class SlipInboxTest {
         assertEquals("2026-10-08", d.date, "the slip's own date, not the file's")
         assertTrue("date-not-file-day" in d.problems)
         assertFalse(d.oneTap)
+        assertEquals("2026-10-11", d.other)
+        assertEquals("สลิปลงวันที่ 8 ต.ค. แต่เซฟรูปวันที่ 11 ต.ค. เช็ควันที่ก่อนบันทึก", slipCheck(d))
+    }
+
+    @Test
+    fun `a misread date with the file's own time on it is the file's day`() {
+        // The 11th read as the 3rd. The time on the slip is the file's to the
+        // minute, so the picture was kept when the money went.
+        val d = draft("โอนเงินสำเร็จ\n3 ต.ค. 69 12:05 น.\nจำนวนเงิน 45.00 บาท", at(12, 5))
+        assertEquals("2026-10-11", d.date)
+        assertEquals("2026-10-03", d.other)
+        assertTrue("date-misread" in d.problems)
+        assertFalse("date-not-file-day" in d.problems)
+        assertFalse(d.oneTap, "said, and still a person's press")
+        assertEquals("อ่านวันที่บนสลิปได้ 3 ต.ค. ซึ่งไม่น่าใช่ เลยใช้วันที่เซฟรูป 11 ต.ค. เช็คก่อนบันทึก", slipCheck(d))
+        // Across midnight the file's day moves with the time on the slip.
+        val late = draft("โอนเงินสำเร็จ\n3 ต.ค. 69 23:59 น.\nจำนวนเงิน 45.00 บาท", at(0, 1, day = 12))
+        assertEquals("2026-10-11", late.date)
+    }
+
+    @Test
+    fun `a date after the picture was kept is a misreading`() {
+        val d = draft("โอนเงินสำเร็จ\n18 ต.ค. 69 08:10 น.\nจำนวนเงิน 45.00 บาท", at(12, 5))
+        assertEquals("2026-10-11", d.date, "no slip is printed after it is saved")
+        assertEquals("2026-10-18", d.other)
+        assertTrue("date-misread" in d.problems)
+    }
+
+    @Test
+    fun `a misread year is shown with the year`() {
+        val d = draft("โอนเงินสำเร็จ\n11 ต.ค. 68 12:05 น.\nจำนวนเงิน 45.00 บาท", at(12, 5))
+        assertEquals("2026-10-11", d.date)
+        assertEquals(
+            "อ่านวันที่บนสลิปได้ 11 ต.ค. 2568 ซึ่งไม่น่าใช่ เลยใช้วันที่เซฟรูป 11 ต.ค. 2569 เช็คก่อนบันทึก",
+            slipCheck(d),
+        )
+    }
+
+    @Test
+    fun `a slip with no memo takes its category from what the shop sells`() {
+        // A Pao Tang slip as the recogniser reads it, made up in the shape of
+        // a real one: what the shop sells is the line under its name.
+        val paotang = listOf(
+            "เปข้าตัง",
+            "@ กํารายการสําเร็จ",
+            "รหัสอ้างอิง 0a1b2c3d-1234-4abc-8def-000000000000",
+            "8 ต.ค. 2569 18:10 น.",
+            "นาย สมชาย ใ***",
+            "G-Wallet ID: **** ******* 1234",
+            "ร้านทดสอบ",
+            "อาหาร ของหวาน เครื่องคื่ม",
+            "ค่าสินค้า/บริการ",
+            "130 บาท",
+            "จํานวนเงินที่ชําระ",
+            "52  บาท",
+        ).joinToString("\n")
+        assertEquals("food", shopCategory(paotang, categories))
+        // Nothing on the bank slips says it.
+        for (raw in listOf(kplusMemo, krungthaiMemo, krungthaiSelf, kplusTitleLost)) assertNull(shopCategory(raw, categories))
+        // Two different things is no answer; a number or a label is never the shop's line.
+        assertNull(shopCategory("อาหาร ของหวาน\nเกม เติมเพชร", categories))
+        assertNull(shopCategory("อาหาร 2 ที่", categories))
+        assertNull(shopCategory("บันทึกช่วยจำ: อาหาร", categories))
+        // The fallback says nothing that no category does not.
+        assertNull(shopCategory("อื่นๆ", categories))
     }
 
     @Test

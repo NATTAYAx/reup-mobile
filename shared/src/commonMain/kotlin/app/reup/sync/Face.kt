@@ -277,6 +277,12 @@ data class HomeRow(
     val recurring: Boolean = true,
     /** Comes back less often than every day. See [longCycle]. */
     val longCycle: Boolean = false,
+    /**
+     * When the task was made, as the row says it ("YYYY-MM-DD HH:MM:SS"), or
+     * null. Only ever compared: rounds due at one moment are named oldest
+     * first, which is the order the desktop's board names them in.
+     */
+    val createdAt: String? = null,
 )
 
 /** A group of rows under one heading, with anything they all share said once. */

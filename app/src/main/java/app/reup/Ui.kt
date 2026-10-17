@@ -25,6 +25,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import app.reup.core.DEFAULT_PALETTE
 import app.reup.core.Palette
+import app.reup.core.NOTE_STYLES
 import app.reup.core.THEMES
 import app.reup.core.paletteOf
 
@@ -100,6 +101,7 @@ object Ui {
 
     private const val PREFS = "reup_look"
     private const val KEY_THEME = "theme"
+    private const val KEY_NOTE_STYLE = "note_style"
 
     /**
      * Which theme this phone is on. Called first thing in every onCreate.
@@ -138,6 +140,31 @@ object Ui {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_THEME, id).apply()
         palette = paletteOf(id)
+    }
+
+    /**
+     * How notes look on this phone: the copy of the synced setting that the
+     * widget and the screens read without waiting on the database, the same
+     * way the theme is read. [adoptNoteStyle] brings it in line after a sync.
+     */
+    fun noteStyle(ctx: Context): String =
+        app.reup.core.noteStyle(ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_NOTE_STYLE, null))
+
+    fun setNoteStyle(ctx: Context, style: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_NOTE_STYLE, app.reup.core.noteStyle(style)).apply()
+    }
+
+    /**
+     * Take the note style the other machine picked, by the same rule as the
+     * theme: a name this build does not know is not a change this build can
+     * make. Returns whether anything moved.
+     */
+    fun adoptNoteStyle(ctx: Context, style: String?): Boolean {
+        if (style == null || style !in NOTE_STYLES) return false
+        if (style == noteStyle(ctx)) return false
+        setNoteStyle(ctx, style)
+        return true
     }
 
     /**

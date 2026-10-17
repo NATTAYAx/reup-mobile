@@ -14,7 +14,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -23,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -39,6 +44,7 @@ import app.reup.core.SetupWarning
 import app.reup.core.categoryName
 import app.reup.core.clockOf
 import app.reup.core.headerDate
+import app.reup.core.noteTilt
 import app.reup.core.heroLine
 import app.reup.core.rowClock
 import app.reup.core.rowLine
@@ -74,6 +80,12 @@ fun TodayScreen(model: HomeModel, actions: AppActions, fabLift: Dp) {
                     over = headerDate(now, zone),
                     trailing = { SyncPill(model, zone, onClick = actions::openSync) },
                 )
+            }
+
+            // The notes first: they are the one thing on this screen somebody
+            // put there themselves so as not to forget it.
+            item(key = "notes") {
+                NoteBoard(model, actions)
             }
 
             // Only the two that mean nothing will arrive at all. The rest are in
@@ -164,6 +176,121 @@ fun TodayScreen(model: HomeModel, actions: AppActions, fabLift: Dp) {
                 .align(Alignment.BottomEnd)
                 .padding(end = Size.gutter, bottom = 16.dp + fabLift),
         )
+    }
+}
+
+// ── the notes ────────────────────────────────────────────────────────────────
+
+/** The tick's disc on dark paper; the widget's widget_tick_dark is the same colour. */
+private val TickDark = Color(0xF21F2433)
+
+/**
+ * The notes that are up, as squares of paper in a row, newest first, and a
+ * square to stick up another. A tap opens one to change it; the round button
+ * on its corner takes it off, as on the widget. A note taken off in the last
+ * few minutes - here or from the widget - can be put back from the line under
+ * the row.
+ */
+@Composable
+private fun NoteBoard(model: HomeModel, actions: AppActions) {
+    val c = Reup.colors
+    Column(Modifier.padding(top = 14.dp)) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = Size.gutter, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            items(model.notes, key = { it.uid }) { note ->
+                Box(
+                    modifier = Modifier
+                        .clickable(onClickLabel = "แก้โน้ต") { actions.editNote(note.uid) }
+                        .semantics { contentDescription = "โน้ต: " + note.body },
+                ) {
+                    val look = noteColors(model.noteStyle, note.color)
+                    NoteSquare(
+                        body = note.body,
+                        color = note.color,
+                        style = model.noteStyle,
+                        tilt = noteTilt(note.uid),
+                        width = 132.dp,
+                        height = 100.dp,
+                        modifier = Modifier.padding(top = 8.dp, end = 8.dp),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(Size.touch)
+                            .clickable(role = Role.Button, onClickLabel = "แกะออก") { model.peelNote(note) }
+                            .semantics { contentDescription = "แกะออก: " + note.body },
+                        contentAlignment = Alignment.TopEnd,
+                    ) {
+                        // As on the widget: white on light paper; on dark
+                        // paper a dark disc, so the tick is the paper's ink.
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(if (look.dark) TickDark else Color.White)
+                                .border(
+                                    1.dp,
+                                    if (look.dark) Color.White.copy(alpha = 0.25f) else look.ink.copy(alpha = 0.25f),
+                                    CircleShape,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_check),
+                                contentDescription = null,
+                                tint = look.ink,
+                                modifier = Modifier.size(15.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            item(key = "add") {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .size(width = if (model.notes.isEmpty()) 132.dp else 96.dp, height = 100.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .border(1.dp, c.outline, RoundedCornerShape(6.dp))
+                        .clickable(role = Role.Button, onClick = actions::addNote),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_note_add),
+                            contentDescription = null,
+                            tint = c.dim,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Text(
+                            text = "แปะโน้ต",
+                            style = ReupType.support,
+                            color = c.dim,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                }
+            }
+        }
+        val gone = model.peeled
+        if (gone != null) {
+            Row(
+                modifier = Modifier.padding(start = Size.gutter, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "เพิ่งแกะ: " + gone.body.replace('\n', ' '),
+                    style = ReupType.support,
+                    color = c.dim,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TextAction(text = "เอาคืน", color = c.accent, onClick = { model.unpeelNote(gone) })
+            }
+        }
     }
 }
 

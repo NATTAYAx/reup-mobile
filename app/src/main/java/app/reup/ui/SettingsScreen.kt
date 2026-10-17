@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -42,6 +45,7 @@ import app.reup.R
 import app.reup.Repo
 import app.reup.SlipWatch
 import app.reup.core.DeviceNotify
+import app.reup.core.NOTE_STYLES
 import app.reup.core.Palette
 import app.reup.core.SetupWarning
 import app.reup.core.THEMES
@@ -229,6 +233,10 @@ fun SettingsScreen(model: HomeModel, actions: AppActions, openDiagnostics: () ->
         item(key = "widget-label") { SectionLabel("วิดเจ็ต") }
         item(key = "widget") { WidgetCard(model.widget, actions) }
 
+        // Under the widget, since a clear widget is what it is for.
+        item(key = "wall-label") { SectionLabel("วอลเปเปอร์") }
+        item(key = "wall") { WallpaperCard(model.wall, actions) }
+
         item(key = "theme-label") { SectionLabel("ธีม · " + paletteOf(model.themeId).name) }
         item(key = "themes") {
             CardGroup {
@@ -242,6 +250,35 @@ fun SettingsScreen(model: HomeModel, actions: AppActions, openDiagnostics: () ->
                         Swatch(p, on = p.id == model.themeId, onPick = { model.setTheme(p.id) })
                     }
                 }
+            }
+        }
+
+        // One look for every note, kept in sync like the theme. The colour of
+        // each sheet stays with the sheet; this is only how strong it is.
+        item(key = "notestyle-label") { SectionLabel("กระดาษโน้ต · " + noteStyleName(model.noteStyle)) }
+        item(key = "notestyles") {
+            CardGroup {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 8.dp, top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    for (style in NOTE_STYLES) {
+                        NoteStyleChoice(
+                            style = style,
+                            on = style == model.noteStyle,
+                            onPick = { model.pickNoteStyle(style) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Text(
+                    text = "ใช้กับโน้ตทุกแผ่น ทั้งในแอป บนวิดเจ็ต และในคอม",
+                    style = ReupType.support,
+                    color = c.faint,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 14.dp),
+                )
             }
         }
 
@@ -260,6 +297,7 @@ fun SettingsScreen(model: HomeModel, actions: AppActions, openDiagnostics: () ->
 
     val frames = model.widget.frames
     if (frames != null) FrameDialog(frames, model.widget)
+    if (model.widget.hiding) HiddenDialog(model.rows(), model.widget)
 
     val choices = model.albumChoices
     if (choices != null) {
@@ -386,6 +424,86 @@ private fun Swatch(p: Palette, on: Boolean, onPick: () -> Unit) {
                     .size(32.dp)
                     .clip(CircleShape)
                     .background(Color(p.primary)),
+            )
+        }
+    }
+}
+
+/** What the note styles are called on this screen. */
+private fun noteStyleName(style: String): String = when (style) {
+    "bright" -> "สด"
+    "dark" -> "เข้ม"
+    else -> "หม่น"
+}
+
+/**
+ * One way of drawing the notes, shown as three small sheets drawn that way on
+ * the screen's own background, with its name under them. Picked the way a
+ * theme is: a ring, and the name in full strength.
+ */
+@Composable
+private fun NoteStyleChoice(style: String, on: Boolean, onPick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = Reup.colors
+    val name = noteStyleName(style)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(role = Role.RadioButton, onClick = onPick)
+            .semantics {
+                contentDescription = "กระดาษโน้ตแบบ$name"
+                selected = on
+            }
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 92.dp, height = 62.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(c.bg)
+                .border(if (on) 2.dp else 1.dp, if (on) c.text else c.outline, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                MiniNote(style, "yellow", -5f)
+                MiniNote(style, "pink", 3f)
+                MiniNote(style, "blue", -2f)
+            }
+        }
+        Text(
+            text = name,
+            style = ReupType.support,
+            color = if (on) c.text else c.dim,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+}
+
+/** A sheet a little bigger than a thumbnail, with two strokes of its ink for words. */
+@Composable
+private fun MiniNote(style: String, color: String, tilt: Float) {
+    val look = noteColors(style, color)
+    val shape = RoundedCornerShape(2.dp)
+    Box(Modifier.rotate(tilt)) {
+        Column(
+            modifier = Modifier
+                .padding(top = 3.dp)
+                .size(width = 24.dp, height = 24.dp)
+                .shadow(if (look.dark) 3.dp else 2.dp, shape)
+                .background(look.paper, shape)
+                .then(if (look.dark) Modifier.border(1.dp, look.ink.copy(alpha = 0.3f), shape) else Modifier)
+                .padding(start = 4.dp, top = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Box(Modifier.size(width = 14.dp, height = 2.dp).background(look.ink.copy(alpha = 0.8f), RoundedCornerShape(1.dp)))
+            Box(Modifier.size(width = 9.dp, height = 2.dp).background(look.ink.copy(alpha = 0.8f), RoundedCornerShape(1.dp)))
+        }
+        if (look.dark) {
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .size(width = 11.dp, height = 5.dp)
+                    .background(look.ink.copy(alpha = 0.55f), RoundedCornerShape(1.dp)),
             )
         }
     }

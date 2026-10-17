@@ -473,6 +473,7 @@ class StoreTest {
                 SYNC_TOKENS_KEY,
                 SYNC_STATE_KEY,
                 KEY_THEME,
+                KEY_NOTE_STYLE,
             ),
         )
     }

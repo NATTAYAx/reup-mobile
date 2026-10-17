@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One note on the widget: the paper as NotePaper draws it - leaning, with its
+  shadow, in a hand - and the round button on its corner that takes it off.
+  The button is not drawn into the picture, so it is a button: the paper
+  opens the note to change it, the button takes it off.
+
+  The picture is sized for the largest of the widget's layouts and held to
+  each one's room by setMaxWidth and setMaxHeight; adjustViewBounds keeps it
+  square to the paper.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <ImageView
+        android:id="@+id/w_note_paper"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter" />
+
+    <ImageView
+        android:id="@+id/w_note_tick"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
+        android:layout_gravity="top|end"
+        android:background="@drawable/widget_tick"
+        android:contentDescription="แกะออก"
+        android:padding="6dp"
+        android:src="@drawable/ic_check" />
+</FrameLayout>

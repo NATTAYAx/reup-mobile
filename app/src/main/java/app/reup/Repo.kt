@@ -9,6 +9,7 @@ import app.reup.sync.driveTokenSource
 import app.reup.core.QuietHours
 import app.reup.sync.Db
 import app.reup.sync.MoneyRepo
+import app.reup.sync.NoteRepo
 import app.reup.sync.QuietSetting
 import app.reup.core.ScheduledTask
 import app.reup.core.nextReset
@@ -60,15 +61,6 @@ object Repo {
     private var opened: TaskRepo? = null
 
     /**
-     * The repository, with the bootstrap already run.
-     *
-     * Run once per process rather than once per call: the bootstrap is 119
-     * statements, 24 of which are expected to fail, and paying that on every
-     * alarm that fires is waste rather than safety. It stays correct under a
-     * race — two callers arriving at once means the bootstrap runs twice, and
-     * running it twice is the property it was designed around.
-     */
-    /**
      * The money half, on the same connection and nothing more.
      *
      * Not cached like [open] is, because it holds no state worth keeping: it is
@@ -76,6 +68,9 @@ object Repo {
      * that uses it is opened by hand rather than by an alarm going off.
      */
     suspend fun money(ctx: Context): MoneyRepo = MoneyRepo(database(ctx))
+
+    /** The notes stuck on the home screen, on the same connection, the schema applied first like the rest. */
+    suspend fun notes(ctx: Context): NoteRepo = NoteRepo(database(ctx))
 
     /**
      * The database, with its schema already applied.
@@ -104,6 +99,16 @@ object Repo {
         return AndroidDb.shared(ctx)
     }
 
+    /**
+     * The repository, with the bootstrap already run.
+     *
+     * Run once per process rather than once per call: the bootstrap is well
+     * over a hundred statements, a good share of which are expected to fail,
+     * and paying that on every alarm that fires is waste rather than safety.
+     * It stays correct under a race — two callers arriving at once means the
+     * bootstrap runs twice, and running it twice is the property it was
+     * designed around.
+     */
     suspend fun open(ctx: Context): TaskRepo {
         opened?.let { return it }
         val repo = TaskRepo(AndroidDb.shared(ctx)).open()
@@ -124,6 +129,14 @@ object Repo {
     /** Say which theme this phone is on, so the other machine can follow. */
     suspend fun setThemeId(ctx: Context, id: String) {
         open(ctx).setThemeId(id)
+    }
+
+    /** How notes look, as stored on either machine, or null for not picked yet. */
+    suspend fun noteStyle(ctx: Context): String? = open(ctx).noteStyle()
+
+    /** Say how notes look, so the other machine can follow. */
+    suspend fun setNoteStyle(ctx: Context, style: String) {
+        open(ctx).setNoteStyle(style)
     }
 
     suspend fun quietHours(ctx: Context): QuietHours? = when (val q = open(ctx).quietSetting()) {
@@ -368,6 +381,39 @@ fun BroadcastReceiver.finishLater(tag: String, block: suspend () -> Unit) {
             Log.e(tag, "background work failed", e)
         } finally {
             pending.finish()
+        }
+    }
+}
+
+/**
+ * [now] inside the broadcast's own time, then [after] outside it.
+ *
+ * For a tap on the home screen whose result somebody is looking at, followed
+ * by a sync nobody is. The system hands this app's broadcasts over one at a
+ * time, and one still working holds up the next - the widget's own redraw and
+ * the next tap included. A sync of a few seconds inside the tap's receiver
+ * meant a note ticked off on the widget stayed on it until the sync was done,
+ * and so did the next one ticked straight after.
+ *
+ * So the broadcast is finished as soon as [now] is, and [after] carries on in
+ * the same process without the system's promise to wait for it. If the
+ * process is frozen or ended first, nothing is lost: what [after] would have
+ * sent is still in the outbox, and the next sync sends it.
+ */
+fun BroadcastReceiver.finishThen(tag: String, now: suspend () -> Unit, after: suspend () -> Unit) {
+    val pending = goAsync()
+    CoroutineScope(Dispatchers.Default).launch {
+        try {
+            now()
+        } catch (e: Throwable) {
+            Log.e(tag, "background work failed", e)
+        } finally {
+            pending.finish()
+        }
+        try {
+            after()
+        } catch (e: Throwable) {
+            Log.i(tag, "left for the next sync: ${e.message}")
         }
     }
 }

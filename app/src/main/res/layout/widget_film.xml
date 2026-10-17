@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The film: a child per tick of the loop (widget_frame.xml), added by
+  ReupWidget, turned by the home screen only while the home screen is on show.
+  How often is the film's own - 42 ms for a smooth one, 83 for a long one
+  (FilmPace in core/Film.kt) - and ReupWidget sets it every time it draws one,
+  before the flipper starts; the 83 here is never what a film plays at.
+
+  Inflated in place of w_film_stub in each size's layout, the first time a
+  film is drawn.
+-->
+<ViewFlipper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_film"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:autoStart="true"
+    android:flipInterval="83"
+    android:importantForAccessibility="no"
+    android:measureAllChildren="false" />

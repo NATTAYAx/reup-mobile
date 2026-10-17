@@ -3,6 +3,7 @@ package app.reup
 
 import android.content.Context
 import android.content.Intent
+import app.reup.sync.CATEGORY_FALLBACK
 import app.reup.sync.SlipDraft
 import app.reup.sync.slipCheck
 import app.reup.sync.slipExpense
@@ -144,7 +145,10 @@ object PendingSlips {
                 if (a == a.toLong().toDouble()) a.toLong().toString() else a.toString(),
             )
         }
-        d.category?.let { intent.putExtra(AddMoneyActivity.EXTRA_CATEGORY, it) }
+        // The category the slip is listed and notified under, which with none
+        // named is the fallback - not whichever chip the form happens to start
+        // on, or the form and the row it came from would disagree.
+        intent.putExtra(AddMoneyActivity.EXTRA_CATEGORY, d.category ?: CATEGORY_FALLBACK)
         d.reference?.let { intent.putExtra(AddMoneyActivity.EXTRA_SLIP_REF, it) }
         d.currency?.let { intent.putExtra(AddMoneyActivity.EXTRA_CURRENCY, it) }
         if ("currency-ambiguous" in d.problems) intent.putExtra(AddMoneyActivity.EXTRA_CURRENCY_UNSURE, true)
@@ -190,6 +194,7 @@ object PendingSlips {
         o.putOpt("category", d.category)
         o.put("self", d.toSelf)
         o.put("problems", JSONArray(d.problems))
+        o.putOpt("other", d.other)
         return o
     }
 
@@ -213,6 +218,7 @@ object PendingSlips {
                 category = o.text("category"),
                 toSelf = o.optBoolean("self", false),
                 problems = if (problems == null) emptyList() else (0 until problems.length()).map { problems.getString(it) },
+                other = o.text("other"),
             ),
         )
     }

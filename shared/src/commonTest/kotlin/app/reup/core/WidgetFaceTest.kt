@@ -227,6 +227,153 @@ class WidgetFaceTest {
         assertEquals(listOf("2/7", "ทำแล้ว 2/7", "ทำแล้ว 2 จาก 7"), widgetTally(2, 7))
     }
 
+    // ── a line for each moment ──────────────────────────────────────────────
+
+    @Test
+    fun `rounds due at one moment are one line, and the day is said once down the list`() {
+        val evening = at("2026-10-14", "20:00")
+        val rows = listOf(
+            daily("Star Rail", at("2026-10-15", "03:00")),
+            daily("FGO", at("2026-10-15", "04:00")),
+            daily("a", at("2026-10-15", "04:00")),
+            daily("b", at("2026-10-15", "04:00")),
+            daily("c", at("2026-10-15", "05:00")),
+            weekly("w", at("2026-10-15", "05:00")),
+        )
+        val s = widgetSchedule(widgetFace(rows, evening, bkk, null))
+        assertEquals(WidgetGroup(listOf("Star Rail"), "พรุ่งนี้ 03:00", warn = false), s.head)
+        assertEquals(
+            listOf(
+                WidgetGroup(listOf("FGO", "a", "b"), "พรุ่งนี้ 04:00", warn = false),
+                // Under พรุ่งนี้ 04:00, 05:00 is tomorrow too. The weekly's last
+                // two days turn the whole line amber.
+                WidgetGroup(listOf("c", "w"), "05:00", warn = true),
+            ),
+            s.soon,
+        )
+        assertEquals(emptyList(), s.later)
+    }
+
+    @Test
+    fun `everything due at the soonest moment is on the card`() {
+        val rows = listOf(
+            daily("a", at("2026-10-14", "13:00")),
+            daily("b", at("2026-10-14", "13:00")),
+            daily("c", at("2026-10-14", "18:00")),
+        )
+        val s = widgetSchedule(widgetFace(rows, now, bkk, null))
+        assertEquals(listOf("a", "b"), s.head!!.names)
+        assertEquals("13:00", s.head!!.time)
+        assertEquals(listOf(WidgetGroup(listOf("c"), "18:00", warn = false)), s.soon)
+    }
+
+    @Test
+    fun `further out is gathered too, but every line keeps its day`() {
+        val rows = listOf(
+            daily("d", at("2026-10-14", "18:00")),
+            weekly("x", at("2026-10-16", "04:00")),
+            weekly("y", at("2026-10-16", "04:00")),
+            weekly("z", at("2026-10-18", "04:00")),
+            weekly("v", at("2026-10-16", "05:00")),
+        )
+        val later = widgetSchedule(widgetFace(rows, now, bkk, null)).later
+        assertEquals(
+            listOf(
+                WidgetGroup(listOf("x", "y"), "หมด ศ. 04:00", warn = true),
+                WidgetGroup(listOf("v"), "หมด ศ. 05:00", warn = true),
+                WidgetGroup(listOf("z"), "หมด อา. 04:00", warn = false),
+            ),
+            later,
+        )
+    }
+
+    @Test
+    fun `a calm day has no card to gather onto`() {
+        val rows = listOf(daily("a", at("2026-10-14", "08:00"), done = true, doneToday = true))
+        val s = widgetSchedule(widgetFace(rows, now, bkk, null))
+        assertEquals(null, s.head)
+        assertEquals(emptyList(), s.soon)
+    }
+
+    // ── the list, in the board's order ──────────────────────────────────────
+
+    @Test
+    fun `the list is the rest of the day, a heading for tomorrow, the bar, then further out`() {
+        val evening = at("2026-10-14", "20:20")
+        val rows = listOf(
+            daily("fgo", at("2026-10-15", "04:00")),
+            daily("test", at("2026-10-15", "04:00")),
+            daily("late", at("2026-10-14", "22:00")),
+            daily("meds", at("2026-10-15", "09:00")),
+            daily("rumble", at("2026-10-15", "10:00")),
+            weekly("plants", at("2026-10-18", "18:00")),
+            weekly("raid", at("2026-10-19", "05:00")),
+        )
+        val face = widgetFace(rows, evening, bkk, null)
+        val items = widgetItems(face, "ทำแล้ว 0 จาก 5", "ต.ค. จ่าย ฿1,240")
+
+        assertEquals(
+            listOf(
+                WidgetItem.Heading("พรุ่งนี้"),
+                WidgetItem.Row("04:00", listOf("fgo", "test"), warn = false, later = false),
+                WidgetItem.Row("09:00", listOf("meds"), warn = false, later = false),
+                WidgetItem.Row("10:00", listOf("rumble"), warn = false, later = false),
+                WidgetItem.Tally("ทำแล้ว 0 จาก 5", 0, 5),
+                WidgetItem.Heading(WIDGET_LATER_HEADING),
+                WidgetItem.Row("หมด อา. 18:00", listOf("plants"), warn = false, later = true),
+                WidgetItem.Row("หมด จ. 05:00", listOf("raid"), warn = false, later = true),
+                WidgetItem.Money("ต.ค. จ่าย ฿1,240"),
+            ),
+            items,
+        )
+        // The card took 22:00, tonight's; the list starts after it.
+        assertEquals(WidgetLine("late", "late", "22:00"), face.next)
+    }
+
+    @Test
+    fun `rows today are bare clocks with no heading, and the card's moment is left out`() {
+        val rows = listOf(
+            daily("a", at("2026-10-14", "13:00")),
+            daily("b", at("2026-10-14", "13:00")),
+            daily("c", at("2026-10-14", "18:00")),
+            daily("d", at("2026-10-15", "04:00")),
+        )
+        val items = widgetItems(widgetFace(rows, now, bkk, null), null, null)
+        assertEquals(
+            listOf(
+                WidgetItem.Row("18:00", listOf("c"), warn = false, later = false),
+                WidgetItem.Heading("พรุ่งนี้"),
+                WidgetItem.Row("04:00", listOf("d"), warn = false, later = false),
+            ),
+            items,
+        )
+    }
+
+    @Test
+    fun `a calm day lists only what is further out`() {
+        val rows = listOf(
+            daily("x", at("2026-10-14", "08:00"), done = true, doneToday = true),
+            weekly("w", at("2026-10-19", "05:00")),
+        )
+        val face = widgetFace(rows, now, bkk, null)
+        val items = widgetItems(face, null, null)
+        // On a calm day the card names the first round after it, so it is not listed twice.
+        assertEquals(emptyList(), items)
+        assertEquals("w", face.calmNext?.id)
+    }
+
+    @Test
+    fun `rounds due at one moment are named oldest task first, as the board names them`() {
+        val four = at("2026-10-15", "04:00")
+        val rows = listOf(
+            daily("new", four).copy(createdAt = "2026-10-10 09:00:00"),
+            daily("old", four).copy(createdAt = "2026-08-01 12:00:00"),
+            daily("mid", four).copy(createdAt = "2026-09-15 08:30:00"),
+        )
+        val s = widgetSchedule(widgetFace(rows, now, bkk, null))
+        assertEquals(listOf("old", "mid", "new"), s.head?.names)
+    }
+
     // ── money, when it has been asked for ───────────────────────────────────
 
     @Test
