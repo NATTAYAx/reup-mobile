@@ -3,6 +3,7 @@ package app.reup.sync
 import app.reup.core.NOTES_SHOWN
 import app.reup.core.NOTE_COLORS
 import app.reup.core.NOTE_STYLES
+import app.reup.core.NOTE_LEAD
 import app.reup.core.NOTE_STYLE_DEFAULT
 import app.reup.core.noteLook
 import app.reup.core.noteStyle
@@ -94,6 +95,7 @@ class NoteVectorsTest {
         val o = cases("noteLimits").single().jsonObject
         assertEquals(o["maxChars"]!!.jsonPrimitive.content.toInt(), NOTE_MAX_CHARS)
         assertEquals(o["shown"]!!.jsonPrimitive.content.toInt(), NOTES_SHOWN)
+        assertEquals(o["lead"]!!.jsonPrimitive.content.toFloat(), NOTE_LEAD)
     }
 
     @Test

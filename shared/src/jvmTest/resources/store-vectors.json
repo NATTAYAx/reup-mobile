@@ -2533,7 +2533,8 @@
   "noteLimits": [
     {
       "maxChars": 120,
-      "shown": 3
+      "shown": 3,
+      "lead": 1.6
     }
   ],
   "noteStyles": [

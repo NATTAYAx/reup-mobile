@@ -18,6 +18,7 @@ import android.text.TextUtils
 import android.util.Log
 import android.util.TypedValue
 import app.reup.core.Note
+import app.reup.core.NOTE_LEAD
 import app.reup.core.NoteLook
 import app.reup.core.noteLook
 import app.reup.core.noteTilt
@@ -149,9 +150,13 @@ object NotePaper {
 
             val pad = PAD_DP * d
             val inner = (paperW - 2 * pad).roundToInt()
-            val layout = words(ctx, note.body, opaque(look.ink), inner, paperH - 2 * pad, dm)
+            // The layout's top is the face's real top, where a tone mark on an
+            // upper vowel reaches (see words), so it can start nearer the edge
+            // than the words themselves do.
+            val top = pad * 0.3f
+            val layout = words(ctx, note.body, opaque(look.ink), inner, paperH - top - pad * 0.6f, dm)
             c.save()
-            c.translate(paperRect.left + pad, paperRect.top + pad * 0.85f)
+            c.translate(paperRect.left + pad, paperRect.top + top)
             layout.draw(c)
             c.restore()
             out
@@ -166,6 +171,14 @@ object NotePaper {
     /**
      * The words, at the largest size from [LARGEST_SP] down that fits the
      * paper whole; at the smallest, as much as fits with "…" at the end.
+     *
+     * Mali's own line is 1.05 em up and 0.25 em down, and its Thai is taller:
+     * a tone mark on an upper vowel reaches 1.45 em, ุ and ู hang to 0.41 em.
+     * So the lines are [NOTE_LEAD] apart rather than the face's 1.3, which ran
+     * one line's marks into the vowels under the one above, and the padding
+     * is included, which takes the first line up to the face's real top and
+     * the last down to its real bottom. The height checked is the layout's
+     * own, padding and all, so nothing that fits is drawn past the paper.
      */
     private fun words(ctx: Context, text: String, ink: Int, width: Int, height: Float, dm: android.util.DisplayMetrics): StaticLayout {
         val pen = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -175,14 +188,23 @@ object NotePaper {
         var sp = LARGEST_SP
         while (true) {
             pen.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, dm)
-            val lineH = pen.fontSpacing
-            val lines = max(1, (height / lineH).toInt())
-            val layout = StaticLayout.Builder.obtain(text, 0, text.length, pen, max(1, width))
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                .setIncludePad(false)
-                .setMaxLines(lines)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .build()
+            // Added rather than multiplied: a multiplier would also stretch
+            // the first line, whose height includes the padding.
+            val pitch = NOTE_LEAD * pen.textSize
+            val add = pitch - (pen.fontMetrics.descent - pen.fontMetrics.ascent)
+            var lines = max(1, (height / pitch).toInt())
+            var layout: StaticLayout
+            while (true) {
+                layout = StaticLayout.Builder.obtain(text, 0, text.length, pen, max(1, width))
+                    .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                    .setIncludePad(true)
+                    .setLineSpacing(add, 1f)
+                    .setMaxLines(lines)
+                    .setEllipsize(TextUtils.TruncateAt.END)
+                    .build()
+                if (layout.height <= height || lines == 1) break
+                lines--
+            }
             val cut = layout.lineCount > 0 && layout.getEllipsisCount(layout.lineCount - 1) > 0
             if (!cut || sp <= SMALLEST_SP) return layout
             sp -= 1f

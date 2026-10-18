@@ -51,9 +51,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -64,6 +66,7 @@ import app.reup.Repo
 import app.reup.ReupWidget
 import app.reup.Ui
 import app.reup.core.NOTE_COLORS
+import app.reup.core.NOTE_LEAD
 import app.reup.core.NOTE_MAX_CHARS
 import app.reup.core.noteBody
 import app.reup.core.noteLook
@@ -89,6 +92,27 @@ import kotlinx.coroutines.withTimeout
 
 /** The hand the notes are written in, on every screen that shows one. */
 val NoteHand = FontFamily(Font(R.font.mali_medium))
+
+/**
+ * A note's words at [size], in [ink].
+ *
+ * Mali says its lines run 1.05 em up and 0.25 em down, and its Thai goes well
+ * past both: a tone mark stacked on an upper vowel (นี้ ซื้อ ปั๊ม) reaches up to
+ * 1.45 em, a vowel under ฎ 0.58 em. A text field cuts whatever is outside its
+ * lines, which is how the mark on นี้ went missing from the first line while it
+ * was being typed, and a Text cuts the same way once it has to end in "…". Font
+ * padding takes the first line up to the face's real top and the last down to
+ * its real bottom, so nothing a note can say is cut. The lines are NOTE_LEAD
+ * apart, the same as on the desktop.
+ */
+fun noteText(size: TextUnit, ink: Color): TextStyle = TextStyle(
+    fontFamily = NoteHand,
+    fontSize = size,
+    lineHeight = size * NOTE_LEAD,
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+    platformStyle = PlatformTextStyle(includeFontPadding = true),
+    color = ink,
+)
 
 /** A note's paper and ink in a style, as the screens draw them; see core/Notes.kt. */
 data class NoteColors(val paper: Color, val ink: Color, val dark: Boolean)
@@ -368,7 +392,7 @@ private fun NotePaperField(
                 state = state,
                 enabled = enabled,
                 inputTransformation = typing,
-                textStyle = TextStyle(fontFamily = NoteHand, fontSize = 22.sp, lineHeight = 31.sp, color = look.ink),
+                textStyle = noteText(22.sp, look.ink),
                 lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 4),
                 cursorBrush = SolidColor(look.ink),
                 modifier = Modifier
@@ -379,12 +403,7 @@ private fun NotePaperField(
                     if (state.text.isEmpty()) {
                         Text(
                             text = "จดอะไรไว้กันลืม…",
-                            style = TextStyle(
-                                fontFamily = NoteHand,
-                                fontSize = 22.sp,
-                                lineHeight = 31.sp,
-                                color = look.ink.copy(alpha = if (look.dark) 0.45f else 0.38f),
-                            ),
+                            style = noteText(22.sp, look.ink.copy(alpha = if (look.dark) 0.45f else 0.38f)),
                         )
                     }
                     field()
@@ -455,7 +474,7 @@ fun NoteSquare(
     tilt: Float,
     width: Dp,
     height: Dp,
-    fontSize: TextUnit = 16.sp,
+    fontSize: TextUnit = 15.sp,
     modifier: Modifier = Modifier,
 ) {
     val look = noteColors(style, color)
@@ -476,7 +495,7 @@ fun NoteSquare(
         ) {
             Text(
                 text = body,
-                style = TextStyle(fontFamily = NoteHand, fontSize = fontSize, lineHeight = fontSize * 1.4f, color = look.ink),
+                style = noteText(fontSize, look.ink),
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }

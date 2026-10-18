@@ -91,6 +91,14 @@ const val NOTE_MAX_CHARS: Int = 120
 /** How many the widget and the boards show at once; the rest are counted. */
 const val NOTES_SHOWN: Int = 3
 
+/**
+ * How far apart a note's lines are, in em. Mali stacks a tone mark on an upper
+ * vowel as high as 1.45 em and hangs ุ and ู 0.41 em under the line, so lines
+ * any closer run one line's marks into the vowels under the line above, as
+ * they did at 1.33 and 1.4. Every board on both machines uses it.
+ */
+const val NOTE_LEAD: Float = 1.6f
+
 /** How far each note leans, in degrees; which one is picked by the note's uid. */
 val NOTE_TILTS: List<Float> = listOf(-3f, 2f, -1.5f, 3f, -2.5f, 1.5f)
 
