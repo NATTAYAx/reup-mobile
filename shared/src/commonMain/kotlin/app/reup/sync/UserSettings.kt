@@ -66,6 +66,35 @@ const val KEY_THEME = "gamesched_theme_id_v1"
 const val KEY_NOTE_STYLE = "gamesched_note_style_v1"
 
 /**
+ * Where the person's day starts, as minutes after midnight in a string: "0" is
+ * midnight, "240" is four in the morning. Set on the desktop under วันใหม่เริ่ม.
+ *
+ * Read here by the Today tab, which needs it to tell a game weekly that runs
+ * out at three on a Monday (Sunday's, for someone still up) from a chore due at
+ * eight that morning (Monday's). See todayFace.
+ */
+const val KEY_DAY_START = "gamesched_day_start_v1"
+
+/** Midnight, which is what every install did before the setting existed. */
+const val DAY_START_DEFAULT = 0
+
+/**
+ * Minutes after midnight, or the default for anything unreadable. Mirror of
+ * the desktop's parseDayStart: a whole number from 0 to 23:59, nothing else.
+ * A stored 1500 would put the start of the day inside tomorrow and every
+ * comparison after it would be off by one, so it is refused, not clamped.
+ */
+fun parseDayStart(raw: String?): Int {
+    if (raw.isNullOrEmpty()) return DAY_START_DEFAULT
+    // The desktop writes String(minutes), so "240"; Number() there also reads
+    // " 240" and "240.0" as 240, and so does this.
+    val d = raw.trim().toDoubleOrNull() ?: return DAY_START_DEFAULT
+    if (d != kotlin.math.floor(d)) return DAY_START_DEFAULT
+    val n = d.toInt()
+    return if (n in 0..(23 * 60 + 59)) n else DAY_START_DEFAULT
+}
+
+/**
  * The write both machines make into user_settings.
  *
  * The WHERE is the part that matters. Without it, storing a value that is
@@ -160,4 +189,5 @@ object UserSettings {
     const val LANG = KEY_LANG
     const val THEME = KEY_THEME
     const val NOTE_STYLE = KEY_NOTE_STYLE
+    const val DAY_START = KEY_DAY_START
 }

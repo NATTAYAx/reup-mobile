@@ -24,6 +24,7 @@ import kotlinx.datetime.TimeZone
  * how the home screen and the tab it opens would come to disagree about it.
  *
  * @param next each task's own next ring, from nextPerTask
+ * @param dayStartMin where the person's day begins, for "ticked today"
  */
 fun homeRows(
     tasks: List<ScheduledTask>,
@@ -31,6 +32,7 @@ fun homeRows(
     next: List<Alarm>,
     now: Instant,
     zone: TimeZone,
+    dayStartMin: Int = 0,
 ): List<HomeRow> {
     val nowIso = isoMillis(now.toEpochMilliseconds())
     val done = tasks.map { it.id }.filter { isDoneNow(infos[it]?.completedUntil, nowIso) }.toSet()
@@ -49,7 +51,7 @@ fun homeRows(
             silent = alarm?.silent ?: false,
             done = id in done,
             resetAt = alarm?.resetAt,
-            doneToday = tickedToday(info?.completedAt, now, zone),
+            doneToday = tickedToday(info?.completedAt, now, zone, dayStartMin),
             paused = task.pausedUntil?.let { it > now } == true,
             cadence = cadencePhrase(task.spec),
             category = info?.category,

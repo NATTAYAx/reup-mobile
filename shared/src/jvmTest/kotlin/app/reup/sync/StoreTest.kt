@@ -474,6 +474,7 @@ class StoreTest {
                 SYNC_STATE_KEY,
                 KEY_THEME,
                 KEY_NOTE_STYLE,
+                KEY_DAY_START,
             ),
         )
     }

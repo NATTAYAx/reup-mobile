@@ -150,6 +150,10 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
     var quiet by mutableStateOf<QuietHours?>(Repo.DEFAULT_QUIET)
         private set
 
+    /** Minutes after midnight where the person's day starts, from the desktop. */
+    var dayStart by mutableStateOf(0)
+        private set
+
     /** Each task's own next ring, for the list. See nextPerTask. */
     var next by mutableStateOf<List<Alarm>>(emptyList())
         private set
@@ -238,7 +242,7 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
      * rows, and a cache is one more thing that can disagree with the state it
      * was made from.
      */
-    fun rows(): List<HomeRow> = homeRows(tasks, infos, next, now, zone)
+    fun rows(): List<HomeRow> = homeRows(tasks, infos, next, now, zone, dayStart)
 
     // ── the clock ───────────────────────────────────────────────────────────
 
@@ -327,6 +331,7 @@ class HomeModel(private val ctx: Context, private val scope: CoroutineScope) {
         infos = repo.infos()
         readNotes()
         quiet = Repo.quietHours(ctx)
+        dayStart = Repo.dayStart(ctx)
         backend = try {
             Repo.syncBackend(ctx)
         } catch (e: Exception) {

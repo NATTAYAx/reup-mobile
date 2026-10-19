@@ -308,7 +308,7 @@ class ReupWidget : AppWidgetProvider() {
             val tasks = repo.tasks()
             val infos = repo.infos()
             val quiet = Repo.quietHours(ctx)
-            val rows = homeRows(tasks, infos, nextPerTask(tasks, now, zone, quiet), now, zone)
+            val rows = homeRows(tasks, infos, nextPerTask(tasks, now, zone, quiet), now, zone, Repo.dayStart(ctx))
             val look = WidgetLook.read(ctx)
             // Private tasks keep their place and their time, not their names.
             val named = if (look.hidden.isEmpty()) {

@@ -66,7 +66,7 @@ fun TodayScreen(model: HomeModel, actions: AppActions, fabLift: Dp) {
     val now = model.now
     val zone = model.zone
     val rows = model.rows()
-    val face = todayFace(rows, now, zone)
+    val face = todayFace(rows, now, zone, model.dayStart)
     val blocking = model.warnings.firstOrNull { it == SetupWarning.NOTIFICATIONS_OFF || it == SetupWarning.CHANNEL_OFF }
 
     Box(Modifier.fillMaxSize()) {
@@ -155,7 +155,7 @@ fun TodayScreen(model: HomeModel, actions: AppActions, fabLift: Dp) {
                                     TaskRow(
                                         row = row,
                                         line = rowLine(row, now, zone, hoisted = section.note != null),
-                                        clock = if (row.done) "" else rowClock(row, zone),
+                                        clock = if (row.done) "" else rowClock(row, zone, today = section.today),
                                         enabled = !model.writing,
                                         onTick = { model.toggle(row.id) },
                                         onEdit = { actions.editTask(row.id) },

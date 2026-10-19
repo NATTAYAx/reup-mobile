@@ -139,6 +139,9 @@ object Repo {
         open(ctx).setNoteStyle(style)
     }
 
+    /** Where the person's day starts, in minutes after midnight. Set on the desktop. */
+    suspend fun dayStart(ctx: Context): Int = open(ctx).dayStartMinutes()
+
     suspend fun quietHours(ctx: Context): QuietHours? = when (val q = open(ctx).quietSetting()) {
         QuietSetting.Unknown -> DEFAULT_QUIET
         QuietSetting.Off -> null

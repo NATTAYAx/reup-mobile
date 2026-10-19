@@ -343,6 +343,13 @@ class TaskRepo(private val db: Db) {
     suspend fun quietSetting(): QuietSetting =
         quietSettingFrom(db.select(userSettingSql(), listOf(SyncValue.Text(UserSettings.QUIET))))
 
+    /** Where the person's day starts, in minutes after midnight; midnight until the desktop says. */
+    suspend fun dayStartMinutes(): Int =
+        parseDayStart(
+            db.select(userSettingSql(), listOf(SyncValue.Text(UserSettings.DAY_START)))
+                .firstOrNull()?.let { text(it, "value") },
+        )
+
     /**
      * Which theme the person picked, on either machine, or null for none yet.
      *

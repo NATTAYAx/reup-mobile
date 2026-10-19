@@ -6,6 +6,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 // ─── Face.kt — what the screens say, as functions of what they were given ────
 //
@@ -291,6 +293,11 @@ data class HomeSection(
     /** Hoisted out of the rows when every row in the section says it. */
     val note: String?,
     val rows: List<HomeRow>,
+    /**
+     * The group for today. Its rows that are not done are open rounds, so the
+     * clock beside them is when the round runs out - see [rowClock].
+     */
+    val today: Boolean = false,
 )
 
 /**
@@ -324,18 +331,35 @@ const val QUIET_NOTE = "ไม่มีเสียง"
 /**
  * The Today tab, cut into what is next, what else is today, and the days after.
  *
- * WHY THE FIRST ROW IS TAKEN OUT OF THE LIST
+ * WHICH DAY A ROW BELONGS TO
  *
- * The list answered "what is coming" and left "what do I do now" to the reader,
- * who had to find the top row and then find its button. The soonest thing due
- * today is the one question someone opening this at a bus stop has, so it gets
- * a card of its own with a button big enough for a thumb, and it is not drawn a
- * second time underneath.
+ * Not the day its next reset falls on. That was the first rule, and it put
+ * every daily still waiting to be done under พรุ่งนี้ the moment its morning
+ * reset had passed - at four in the afternoon, with seven dailies open, the
+ * tab said "วันนี้ไม่มีอะไรรีเซ็ต". True of resets, and the wrong answer to
+ * the question the tab is opened with, which is what is there to do.
  *
- * Only something due TODAY. A daily that resets at four tomorrow morning is not
- * "next" at eight in the evening in any sense a person means; it is tomorrow's.
- * When nothing is left today the card becomes [Calm], which names the next
- * round in words, because an empty slot where a card should be reads as a bug.
+ * A row that is not done belongs to the day it has to be done by, and two
+ * rules say which day that is:
+ *
+ *   1. Its deadline falls before the person's next day begins. The day is
+ *      theirs, from [dayStartMin] - a game weekly that resets at three on a
+ *      Monday is Sunday's for someone whose day starts at four, and a chore
+ *      due at eight on a Monday is Monday's. One number tells those two apart
+ *      without anybody having to say which kind of weekly a task is.
+ *
+ *   2. It is a daily and its round is open. A daily that resets at four
+ *      tomorrow is today's, and so is medicine due at nine this morning and
+ *      not yet ticked at four in the afternoon: its round began today and is
+ *      still open. Rule 1 alone would file the medicine under tomorrow.
+ *
+ * Everything else sits under the day its deadline falls on, by the same
+ * person's calendar. Something paused is left where its own date puts it: it
+ * has asked not to be reminded, and today's list is a reminder.
+ *
+ * A deadline exactly on the boundary is the day before it. A weekly that runs
+ * out at midnight, or at the very minute the person's day starts, has to be
+ * done by the evening before - which is the day a person would name.
  *
  * WHERE A TICKED ROW GOES
  *
@@ -357,9 +381,12 @@ const val QUIET_NOTE = "ไม่มีเสียง"
  *
  * Preserved exactly as given. The caller has already sorted by [homeOrder], and
  * a second opinion about order in here is how two rules end up disagreeing.
+ *
+ * @param dayStartMin minutes after midnight where the person's day begins, as
+ *   the desktop's "วันใหม่เริ่ม" stores it; 0 is midnight
  */
-fun todayFace(rows: List<HomeRow>, now: Instant, zone: TimeZone): TodayFace {
-    val today = now.toLocalDateTime(zone).date
+fun todayFace(rows: List<HomeRow>, now: Instant, zone: TimeZone, dayStartMin: Int = 0): TodayFace {
+    val today = personalDate(now, zone, dayStartMin)
 
     val dueToday = ArrayList<HomeRow>()
     val undated = ArrayList<HomeRow>()
@@ -371,16 +398,17 @@ fun todayFace(rows: List<HomeRow>, now: Instant, zone: TimeZone): TodayFace {
     val later = LinkedHashMap<LocalDate, MutableList<HomeRow>>()
 
     for (r in rows) {
-        val at = r.fireAt
+        val deadline = r.resetAt ?: r.fireAt
         when {
             r.done && r.doneToday -> doneToday.add(r)
             r.done -> doneBefore.add(r)
-            at == null -> undated.add(r)
+            deadline == null -> undated.add(r)
+            r.recurring && !r.longCycle && !r.paused -> dueToday.add(r)
             else -> {
-                val day = at.toLocalDateTime(zone).date
-                // The queue only holds the future, so "not after today" is
-                // today. Said this way so a clock that moved backwards puts a
-                // row on today rather than on a day that has already gone.
+                val day = deadlineDay(deadline, zone, dayStartMin)
+                // "Not after today" rather than "today", so a clock that moved
+                // backwards puts a row on today rather than on a day that has
+                // already gone.
                 if (today.daysUntil(day) <= 0) dueToday.add(r)
                 else later.getOrPut(day) { ArrayList() }.add(r)
             }
@@ -397,11 +425,12 @@ fun todayFace(rows: List<HomeRow>, now: Instant, zone: TimeZone): TodayFace {
                 title = if (rest.isNotEmpty()) "ที่เหลือวันนี้" else "ทำแล้ววันนี้",
                 note = hoisted(rest),
                 rows = rest + doneToday,
+                today = true,
             ),
         )
     }
-    for (group in later.values) {
-        sections.add(HomeSection(dayTitle(group[0].fireAt!!, now, zone), hoisted(group), group))
+    for ((day, group) in later) {
+        sections.add(HomeSection(dayHeading(day, today), hoisted(group), group))
     }
     if (undated.isNotEmpty()) sections.add(HomeSection("ไม่มีกำหนด", null, undated))
     if (doneBefore.isNotEmpty()) sections.add(HomeSection("ทำแล้ว รอรอบใหม่", null, doneBefore))
@@ -418,6 +447,24 @@ fun todayFace(rows: List<HomeRow>, now: Instant, zone: TimeZone): TodayFace {
     return TodayFace(next, calm, sections)
 }
 
+/**
+ * The day an instant falls on, for someone whose day starts [dayStartMin]
+ * minutes after midnight. With 240, three in the morning is still yesterday.
+ *
+ * Only for the app's own idea of "today". A game server's reset and a bank's
+ * posting date keep the calendar, as they do on the desktop.
+ */
+fun personalDate(at: Instant, zone: TimeZone, dayStartMin: Int = 0): LocalDate =
+    (at - dayStartMin.minutes).toLocalDateTime(zone).date
+
+/**
+ * The day something has to be done by: the day of the last moment before its
+ * deadline. A round that runs out exactly as a day begins belongs to the day
+ * that is ending.
+ */
+fun deadlineDay(deadline: Instant, zone: TimeZone, dayStartMin: Int = 0): LocalDate =
+    personalDate(deadline - 1.seconds, zone, dayStartMin)
+
 /** The quiet note, when every row still waiting says it and there is more than one. */
 private fun hoisted(waiting: List<HomeRow>): String? =
     if (waiting.size > 1 && waiting.all { it.silent }) QUIET_NOTE else null
@@ -429,12 +476,13 @@ private fun hoisted(waiting: List<HomeRow>): String? =
  * The date rides along with พรุ่งนี้ because a heading is read once, carefully,
  * and "tomorrow" alone makes the reader work out which day that is.
  */
-fun dayTitle(at: Instant, now: Instant, zone: TimeZone): String {
-    val today = now.toLocalDateTime(zone).date
-    val t = at.toLocalDateTime(zone)
-    val date = THAI_DAYS[t.dayOfWeek.isoDayNumber % 7] + " " + t.dayOfMonth + " " +
-            THAI_MONTHS_SHORT[t.monthNumber - 1]
-    return when (today.daysUntil(t.date)) {
+fun dayTitle(at: Instant, now: Instant, zone: TimeZone): String =
+    dayHeading(at.toLocalDateTime(zone).date, now.toLocalDateTime(zone).date)
+
+private fun dayHeading(day: LocalDate, today: LocalDate): String {
+    val date = THAI_DAYS[day.dayOfWeek.isoDayNumber % 7] + " " + day.dayOfMonth + " " +
+            THAI_MONTHS_SHORT[day.monthNumber - 1]
+    return when (today.daysUntil(day)) {
         0 -> "วันนี้"
         1 -> "พรุ่งนี้ · $date"
         -1 -> "เมื่อวาน · $date"
@@ -465,7 +513,14 @@ private fun whenWords(at: Instant, now: Instant, zone: TimeZone): String {
 fun heroLine(row: HomeRow, now: Instant, zone: TimeZone): String {
     val at = row.fireAt ?: return ""
     val sameDay = now.toLocalDateTime(zone).date == at.toLocalDateTime(zone).date
-    val time = if (sameDay) clockOf(at, zone) else dayPhrase(at, now, zone) + " " + clockOf(at, zone)
+    val whenAt = if (sameDay) clockOf(at, zone) else dayPhrase(at, now, zone) + " " + clockOf(at, zone)
+    // A round that comes back is open until it resets, so its time is a
+    // deadline: "ถึงพรุ่งนี้ 03:00". A one-off's time is when it happens.
+    val time = when {
+        !row.recurring -> whenAt
+        sameDay -> "ถึง $whenAt"
+        else -> "ถึง$whenAt"
+    }
     val parts = arrayListOf(time, untilPhrase(now, at))
     if (row.silent) parts.add(QUIET_NOTE)
     return parts.joinToString(" · ")
@@ -473,9 +528,17 @@ fun heroLine(row: HomeRow, now: Instant, zone: TimeZone): String {
 
 /**
  * The clock in the right-hand column, or nothing when there is no next round.
+ *
+ * In today's group a round that comes back says "ถึง 03:00": it is open until
+ * then, and a bare 03:00 under วันนี้ at four in the afternoon reads as a time
+ * that has already gone.
+ *
+ * @param today the row is in today's group ([HomeSection.today])
  */
-fun rowClock(row: HomeRow, zone: TimeZone): String =
-    if (row.fireAt == null) "" else clockOf(row.fireAt, zone)
+fun rowClock(row: HomeRow, zone: TimeZone, today: Boolean = false): String {
+    val at = row.fireAt ?: return ""
+    return if (today && row.recurring && !row.done) "ถึง " + clockOf(at, zone) else clockOf(at, zone)
+}
 
 /**
  * The second line of a row: how often, what kind, and anything unusual.
@@ -579,10 +642,10 @@ fun categoryName(key: String?): String? = when (key) {
  * parse is "not today", which puts the row in the group at the bottom rather
  * than losing it.
  */
-fun tickedToday(completedAt: String?, now: Instant, zone: TimeZone): Boolean {
+fun tickedToday(completedAt: String?, now: Instant, zone: TimeZone, dayStartMin: Int = 0): Boolean {
     val raw = completedAt?.takeIf { it.isNotBlank() } ?: return false
     val at = runCatching { Instant.parse(raw) }.getOrNull() ?: return false
-    return at.toLocalDateTime(zone).date == now.toLocalDateTime(zone).date
+    return personalDate(at, zone, dayStartMin) == personalDate(now, zone, dayStartMin)
 }
 
 // ─── the forms ───────────────────────────────────────────────────────────────

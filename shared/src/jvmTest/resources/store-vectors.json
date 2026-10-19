@@ -2483,7 +2483,8 @@
     "sync_google_tokens",
     "sync_state_v1",
     "gamesched_theme_id_v1",
-    "gamesched_note_style_v1"
+    "gamesched_note_style_v1",
+    "gamesched_day_start_v1"
   ],
   "themeIds": [
     "violet",

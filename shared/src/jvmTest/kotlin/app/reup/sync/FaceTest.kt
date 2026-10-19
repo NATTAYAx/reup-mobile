@@ -237,7 +237,14 @@ class FaceTest {
         cadence: String? = null,
         category: String? = null,
         recurring: Boolean = true,
-    ) = HomeRow(id, id, at, silent, done, resetAt, doneToday, paused, cadence, category, recurring)
+        // True unless a test says otherwise: most of the cases below are about
+        // which day a deadline falls on, and an open daily is today's whatever
+        // its date (see the daily tests further down).
+        longCycle: Boolean = true,
+    ) = HomeRow(id, id, at, silent, done, resetAt, doneToday, paused, cadence, category, recurring, longCycle)
+
+    private fun daily(id: String, at: Instant, paused: Boolean = false) =
+        row(id, at, cadence = "ทุกวัน", longCycle = false, paused = paused)
 
     @Test
     fun `the soonest thing due today gets the card and is not drawn twice`() {
@@ -386,8 +393,108 @@ class FaceTest {
 
     @Test
     fun `the big card counts down, which the rows do not`() {
-        assertEquals("10:33 · อีก 33 นาที", heroLine(row("a", plus(33 * 60)), now, bkk))
-        assertEquals("10:33 · อีก 33 นาที · ไม่มีเสียง", heroLine(row("a", plus(33 * 60), silent = true), now, bkk))
+        assertEquals("10:33 · อีก 33 นาที", heroLine(row("a", plus(33 * 60), recurring = false), now, bkk))
+        assertEquals(
+            "10:33 · อีก 33 นาที · ไม่มีเสียง",
+            heroLine(row("a", plus(33 * 60), silent = true, recurring = false), now, bkk),
+        )
+    }
+
+    @Test
+    fun `the big card gives a round that comes back as a deadline`() {
+        // Open until it resets, so "by", not "at".
+        assertEquals("ถึง 10:33 · อีก 33 นาที", heroLine(row("a", plus(33 * 60)), now, bkk))
+        assertEquals("ถึงพรุ่งนี้ 04:00 · อีก 18 ชม.", heroLine(daily("a", fourAm(1)), now, bkk))
+    }
+
+    // ── which day an open round belongs to ───────────────────────────────────
+    //
+    // The bug these are here for: at four in the afternoon, with seven dailies
+    // reset that morning and none of them ticked, the tab said
+    // "วันนี้ไม่มีอะไรรีเซ็ต", because every one of them next reset tomorrow.
+
+    /** Four in the morning, as the desktop's วันใหม่เริ่ม stores it. */
+    private val four = 240
+
+    @Test
+    fun `an open daily that resets tomorrow morning is today's, not tomorrow's`() {
+        val face = todayFace(listOf(daily("hsr", fourAm(1)), daily("fgo", fourAm(1))), now, bkk)
+        assertEquals("hsr", face.next?.id)
+        assertEquals(null, face.calm)
+        assertEquals(listOf("ที่เหลือวันนี้"), face.sections.map { it.title })
+        assertEquals(true, face.sections[0].today)
+    }
+
+    @Test
+    fun `medicine due this morning and not ticked is still today's in the afternoon`() {
+        // Its round began at nine today and is open until nine tomorrow. By
+        // deadline alone it would be filed under tomorrow.
+        val nineTomorrow = Instant.parse("2026-08-31T02:00:00Z")
+        val face = todayFace(listOf(daily("meds", nineTomorrow)), now, bkk, four)
+        assertEquals("meds", face.next?.id)
+    }
+
+    @Test
+    fun `a game weekly running out at three on Monday is Sunday's for someone whose day starts at four`() {
+        val threeMonday = Instant.parse("2026-08-30T20:00:00Z")  // 03:00 Mon 31 local
+        val face = todayFace(listOf(row("weekly", threeMonday, cadence = "ทุกวันจันทร์")), now, bkk, four)
+        assertEquals("weekly", face.next?.id)
+        // With the day starting at midnight, the same round is tomorrow's.
+        assertEquals(null, todayFace(listOf(row("weekly", threeMonday)), now, bkk).next)
+    }
+
+    @Test
+    fun `a chore due at eight on Monday is Monday's whenever the day starts`() {
+        val eightMonday = Instant.parse("2026-08-31T01:00:00Z")
+        val face = todayFace(listOf(row("trash", eightMonday)), now, bkk, four)
+        assertEquals(null, face.next)
+        assertEquals(listOf("พรุ่งนี้ · จันทร์ 31 ส.ค."), face.sections.map { it.title })
+    }
+
+    @Test
+    fun `a round that runs out exactly as the day begins belongs to the day that is ending`() {
+        val midnightMonday = Instant.parse("2026-08-30T17:00:00Z")  // 00:00 Mon 31 local
+        assertEquals("w", todayFace(listOf(row("w", midnightMonday)), now, bkk).next?.id)
+        val fourMonday = fourAm(1)
+        assertEquals("w", todayFace(listOf(row("w", fourMonday)), now, bkk, four).next?.id)
+    }
+
+    @Test
+    fun `a weekly with days left waits under its own day`() {
+        val face = todayFace(listOf(row("w", fourAm(4))), now, bkk, four)
+        assertEquals(null, face.next)
+        assertEquals("วันนี้ไม่มีอะไรรีเซ็ต", face.calm?.title)
+        assertEquals(listOf("พุธ 2 ก.ย."), face.sections.map { it.title })
+    }
+
+    @Test
+    fun `a paused daily is not today's`() {
+        // It asked not to be reminded, and today's list is a reminder.
+        val face = todayFace(listOf(daily("p", fourAm(3), paused = true)), now, bkk)
+        assertEquals(null, face.next)
+    }
+
+    @Test
+    fun `the personal day turns at the hour it is set to`() {
+        val threeAm = Instant.parse("2026-08-30T20:00:00Z")  // 03:00 Mon local
+        assertEquals(LocalDate(2026, 8, 30), personalDate(threeAm, bkk, four))
+        assertEquals(LocalDate(2026, 8, 31), personalDate(threeAm, bkk))
+    }
+
+    @Test
+    fun `a tick at two in the morning still counts for the day before it`() {
+        val twoAm = Instant.parse("2026-08-30T19:00:00Z")    // 02:00 Mon local
+        val tickedAt = "2026-08-30T10:00:00Z"                // 17:00 Sun local
+        assertEquals(true, tickedToday(tickedAt, twoAm, bkk, four))
+        assertEquals(false, tickedToday(tickedAt, twoAm, bkk))
+    }
+
+    @Test
+    fun `in today's group a round that comes back says until when`() {
+        val r = daily("a", fourAm(1))
+        assertEquals("ถึง 04:00", rowClock(r, bkk, today = true))
+        assertEquals("04:00", rowClock(r, bkk))
+        assertEquals("09:00", rowClock(row("x", Instant.parse("2026-08-30T02:00:00Z"), recurring = false), bkk, today = true))
     }
 
     @Test
