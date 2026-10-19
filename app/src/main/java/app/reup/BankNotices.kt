@@ -74,6 +74,7 @@ object BankNotices {
 
     private const val PREFS = "reup_income"
     private const val KEY_ON = "on"
+    /** No longer read. Removed the next time the switch moves; see [setOn]. */
     private const val KEY_SINCE = "since"
     private const val KEY_ARRIVALS = "arrivals"
     private const val KEY_MOVES = "moves"
@@ -119,13 +120,26 @@ object BankNotices {
     fun isOn(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_ON, false)
 
     /**
-     * On means from now, as it does for slips: a notice already in the shade
-     * when this is switched on is not read. Off lets the listener go.
+     * On reads what the two banks still have in the shade, as well as what
+     * comes after. Off lets the listener go.
+     *
+     * It used to mean "from now", the way the slip switch does. For slips
+     * that is right: an album holds years of pictures, and switching on is
+     * not an invitation to go through them. The shade is not an album. It
+     * holds the last few notices, nothing here reads one older than
+     * [CATCH_UP_MS], and the person who switches this on is very likely
+     * doing it because money they just received did not show up - which
+     * "from now" then refused to read, the one time it was asked for.
+     *
+     * Nothing read this way is written anywhere but the waiting list, as
+     * with every other notice: a payment already typed in by hand shows up
+     * once more there, and is put away with ไม่บันทึก.
      */
     fun setOn(ctx: Context, on: Boolean) {
-        val edit = prefs(ctx).edit().putBoolean(KEY_ON, on)
-        if (on) edit.putLong(KEY_SINCE, System.currentTimeMillis())
-        edit.apply()
+        prefs(ctx).edit()
+            .putBoolean(KEY_ON, on)
+            .remove(KEY_SINCE)
+            .apply()
         BankNoticeListener.switched(ctx, on)
     }
 
@@ -175,7 +189,7 @@ object BankNotices {
         val p = prefs(ctx)
         if (!p.getBoolean(KEY_ON, false)) return false
         val now = System.currentTimeMillis()
-        if (postTime < p.getLong(KEY_SINCE, Long.MAX_VALUE) || now - postTime > CATCH_UP_MS) return false
+        if (now - postTime > CATCH_UP_MS) return false
         val posted = Instant.fromEpochMilliseconds(postTime).toLocalDateTime(TimeZone.currentSystemDefault())
         val n = bankNotice(app, title, text, posted)
         if (n == null) {
